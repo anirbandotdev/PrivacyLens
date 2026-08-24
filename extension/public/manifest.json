@@ -3,7 +3,7 @@
   "name": "PrivacyLens",
   "description": "Privacy-Preserving Browser Vision Agent — local vision + PII redaction → sanitized context → server VLM → browser actions",
   "version": "0.1.0",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "<all_urls>"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -16,5 +16,9 @@
     "16": "logo.png",
     "48": "logo.png",
     "128": "logo.png"
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "service_worker": "background.js"
   }
 }

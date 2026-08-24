@@ -1,33 +1,68 @@
-import React, { useState, useCallback } from 'react';
-import StatusBadge from '../components/StatusBadge.jsx';
-import ConnectionIndicator from '../components/ConnectionIndicator.jsx';
+import { useState, useCallback } from "react";
+import StatusBadge from "../components/StatusBadge.jsx";
+import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
 
 const PRIVACY_LEVELS = [
-  { key: 'low', label: 'Low', desc: 'Token replacement only' },
-  { key: 'medium', label: 'Medium', desc: 'Tokens + face blur' },
-  { key: 'high', label: 'High', desc: 'Full PII redaction' },
+  { key: "low", label: "Low", desc: "Token replacement only" },
+  { key: "medium", label: "Medium", desc: "Tokens + face blur" },
+  { key: "high", label: "High", desc: "Full PII redaction" },
 ];
 
 export default function PopupApp() {
   const [agentActive, setAgentActive] = useState(false);
-  const [status, setStatus] = useState('idle');
-  const [privacyLevel, setPrivacyLevel] = useState('medium');
-  const [serverStatus] = useState('connected');
+  const [status, setStatus] = useState("idle");
+  const [privacyLevel, setPrivacyLevel] = useState("medium");
+  const [serverStatus] = useState("connected");
   const [latency] = useState(42);
+  const [captureError, setCaptureError] = useState(null)
+  const [capturing, setCapturing] = useState(false)
+  const [screenshot, setScreenshot] = useState(null)
 
-  const handleToggleAgent = useCallback(() => {
-    setAgentActive(prev => {
-      const next = !prev;
-      setStatus(next ? 'observing' : 'idle');
-      return next;
-    });
-  }, []);
+  const handleToggleAgent = useCallback(async () => {
+    if (agentActive) {
+      setAgentActive(false);
+      setStatus("idle");
+      return;
+    }
+
+    setAgentActive(true);
+    setStatus("observing");
+    setCaptureError(null);
+    setCapturing(true);
+
+    try {
+      const browserAPI = globalThis.browser || globalThis.chrome;
+
+      const response = await browserAPI.runtime.sendMessage({
+        type: "CAPTURE_SCREEN",
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.error || "Screen capture failed");
+      }
+      console.log(response.screenshot)
+      setScreenshot(response.screenshot);
+
+      console.log("Screenshot captured successfully");
+
+
+
+    } catch (error) {
+      console.error("Screen capture error:", error);
+
+      setCaptureError(error.message);
+      setStatus("error");
+      setAgentActive(false);
+    } finally {
+      setCapturing(false);
+    }
+  }, [agentActive]);
 
   const openDashboard = useCallback(() => {
     const url = chrome?.runtime?.getURL
-      ? chrome.runtime.getURL('dashboard.html')
-      : 'dashboard.html';
-    window.open(url, '_blank');
+      ? chrome.runtime.getURL("dashboard.html")
+      : "dashboard.html";
+    window.open(url, "_blank");
   }, []);
 
   return (
@@ -47,11 +82,15 @@ export default function PopupApp() {
       {/* Main Toggle */}
       <div className="popup__section">
         <button
-          className={`popup__agent-btn ${agentActive ? 'popup__agent-btn--active' : ''}`}
+          className={`popup__agent-btn ${agentActive ? "popup__agent-btn--active" : ""}`}
           onClick={handleToggleAgent}
         >
-          <span className="popup__agent-btn-icon">{agentActive ? '⏸' : '▶'}</span>
-          <span className="popup__agent-btn-label">{agentActive ? 'Stop Agent' : 'Start Agent'}</span>
+          <span className="popup__agent-btn-icon">
+            {agentActive ? "⏸" : "▶"}
+          </span>
+          <span className="popup__agent-btn-label">
+            {agentActive ? "Stop Agent" : "Start Agent"}
+          </span>
         </button>
       </div>
 
@@ -59,10 +98,10 @@ export default function PopupApp() {
       <div className="popup__section">
         <span className="popup__section-title">Privacy Level</span>
         <div className="popup__privacy-levels">
-          {PRIVACY_LEVELS.map(level => (
+          {PRIVACY_LEVELS.map((level) => (
             <button
               key={level.key}
-              className={`popup__privacy-btn ${privacyLevel === level.key ? 'popup__privacy-btn--active' : ''}`}
+              className={`popup__privacy-btn ${privacyLevel === level.key ? "popup__privacy-btn--active" : ""}`}
               onClick={() => setPrivacyLevel(level.key)}
               title={level.desc}
             >
