@@ -1,0 +1,1 @@
+A light-weight extension which helps user redact personal/sensitive information and also helps in automate user's in-browser works like Form Filling etc.
