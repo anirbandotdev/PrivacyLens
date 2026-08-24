@@ -1,0 +1,37 @@
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.status-badge--lg {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  gap: 8px;
+}
+.status-badge__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot-color);
+  flex-shrink: 0;
+}
+.status-badge--lg .status-badge__dot {
+  width: 10px;
+  height: 10px;
+}
+.badge-observing, .badge-acting {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.badge-error {
+  animation: pulse 0.8s ease-in-out infinite;
+}
+.status-badge__label {
+  color: var(--text-primary);
+}

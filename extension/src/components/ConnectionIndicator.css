@@ -1,0 +1,51 @@
+.conn-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+.conn-indicator--connected {
+  border-color: var(--teal-glow);
+}
+.conn-indicator__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.conn-indicator__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.conn-dot--on {
+  background: var(--teal-bright);
+  box-shadow: 0 0 6px var(--teal-glow);
+  animation: pulse 2s ease-in-out infinite;
+}
+.conn-dot--off {
+  background: #e05252;
+}
+.conn-indicator__status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.conn-indicator__latency {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--teal-bright);
+  font-family: var(--font-mono);
+}
+.conn-indicator__endpoint {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
