@@ -1,9 +1,10 @@
-import { randomUUID } from "node:crypto";
 import express from "express";
+import { randomUUID } from "node:crypto";
+import { analyzeWithGemini } from "../services/gemini.js";
 
 const router = express.Router();
 
-router.post("/", (request, response) => {
+router.post("/", async (request, response) => {
   const { prompt, sanitizedText, sanitizedScreenshot, redactionSummary, privacyVerified } = request.body || {};
 
   if (privacyVerified !== true) {
@@ -61,13 +62,38 @@ router.post("/", (request, response) => {
   const requestId = randomUUID();
   console.log(`[Request ID] ${requestId}`);
 
-  return response.status(202).json({
-    success: true,
-    requestId,
-    status: "received",
-    redactionSummary: redactionSummary || {},
-    message: "Sanitized context received and accepted for analysis.",
-  });
+  try {
+    const analysis = await analyzeWithGemini({
+      prompt,
+      sanitizedText,
+      sanitizedScreenshot,
+    });
+
+    return response.status(200).json({
+      success: true,
+      requestId,
+      status: "completed",
+      message: analysis.message,
+      actions: analysis.actions,
+      redactionSummary: redactionSummary || {},
+    });
+  } catch (error) {
+      // Temporary privacy-safe diagnostic log
+      console.error(JSON.stringify({
+        requestId,
+        errorName: error.name,
+        errorMessage: error.message,
+        statusCode: error.status || error.statusCode || "N/A"
+      }));
+
+      // Generic response to the client
+      response.status(502).json({
+        success: false,
+        requestId,
+        status: "failed",
+        error: "AI analysis failed. Please try again."
+      });
+  }
 });
 
 export default router;
