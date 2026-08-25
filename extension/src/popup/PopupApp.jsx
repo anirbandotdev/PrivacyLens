@@ -1,6 +1,8 @@
-import { useState, useCallback } from "react";
-import StatusBadge from "../components/StatusBadge.jsx";
+import { useCallback, useState } from "react";
 import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
+import StatusBadge from "../components/StatusBadge.jsx";
+import PromptBox from "../components/PromptBox.jsx";
+import ActionConfirmation from "../components/ActionPerm.jsx";
 import { textReader } from "../vision/ocr.js";
 import { detectPII } from "../vision/pii-detector.js";
 
@@ -20,14 +22,10 @@ export default function PopupApp() {
   const [captureError, setCaptureError] = useState(null);
   const [capturing, setCapturing] = useState(false);
   const [screenshot, setScreenshot] = useState(null);
+  const [prompt, setPrompt] = useState("");
+  const [pendingAction, setPendingAction] = useState(null);
 
-  const handleToggleAgent = useCallback(async () => {
-    if (agentActive) {
-      setAgentActive(false);
-      setStatus("idle");
-      return;
-    }
-
+  const startAgentFlow = useCallback(async () => {
     setAgentActive(true);
     setStatus("observing");
     setCaptureError(null);
@@ -60,7 +58,23 @@ export default function PopupApp() {
     } finally {
       setCapturing(false);
     }
-  }, [agentActive]);
+  }, []);
+
+  const handleToggleAgent = useCallback(async () => {
+    if (agentActive) {
+      setAgentActive(false);
+      setStatus("idle");
+      return;
+    }
+
+    startAgentFlow();
+  }, [agentActive, startAgentFlow]);
+
+  const handlePromptSubmit = useCallback(() => {
+    if (!agentActive) {
+      startAgentFlow();
+    }
+  }, [agentActive, startAgentFlow]);
 
   const openDashboard = useCallback(() => {
     const url = chrome?.runtime?.getURL
@@ -82,6 +96,16 @@ export default function PopupApp() {
         </div>
         <StatusBadge status={status} />
       </header>
+
+      {/* User Prompt */}
+      <div className="popup__section">
+        <PromptBox
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSubmit={handlePromptSubmit}
+          disabled={capturing}
+        />
+      </div>
 
       {/* Main Toggle */}
       <div className="popup__section">
@@ -149,6 +173,16 @@ export default function PopupApp() {
           <span className="popup__dashboard-arrow">→</span>
         </button>
       </div>
+
+      {/* Action Permission Dialog */}
+      {pendingAction && (
+        <ActionConfirmation
+          action={pendingAction}
+          onApprove={() => setPendingAction(null)}
+          onReject={() => setPendingAction(null)}
+        />
+      )}
     </div>
   );
 }
+
