@@ -1,0 +1,119 @@
+.action-confirmation__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+
+  background: rgba(35, 37, 42, 0.88);
+  backdrop-filter: blur(4px);
+}
+
+.action-confirmation {
+  width: 100%;
+  max-width: 310px;
+  padding: 18px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+
+  text-align: center;
+  animation: fadeIn var(--transition-default) ease-out;
+}
+
+.action-confirmation__icon {
+  font-size: 1.6rem;
+  color: var(--accent-secondary-bright);
+}
+
+.action-confirmation__title {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.action-confirmation__description {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.action-confirmation__details {
+  width: 100%;
+  padding: 10px 12px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+
+  background: var(--bg-input);
+  text-align: left;
+}
+
+.action-confirmation__action {
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.action-confirmation__target {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.action-confirmation__buttons {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.action-confirmation__reject,
+.action-confirmation__approve {
+  padding: 9px;
+
+  border-radius: var(--radius-sm);
+
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+
+  cursor: pointer;
+  transition: all var(--transition-default);
+}
+
+.action-confirmation__reject {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.action-confirmation__reject:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.action-confirmation__approve {
+  border: 1px solid var(--teal-bright);
+  background: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.action-confirmation__approve:hover {
+  background: var(--accent-primary-bright);
+  box-shadow: var(--shadow-glow-teal);
+}
