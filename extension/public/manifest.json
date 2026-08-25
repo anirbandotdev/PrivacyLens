@@ -3,7 +3,11 @@
   "name": "PrivacyLens",
   "description": "Privacy-Preserving Browser Vision Agent — local vision + PII redaction → sanitized context → server VLM → browser actions",
   "version": "0.1.0",
-  "permissions": ["activeTab", "scripting", "storage", "<all_urls>"],
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permission": ["<all_urls>"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

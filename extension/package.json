@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "tesseract.js": "^7.0.0",
+    "worker.min.js": "^1.2.3-0"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
