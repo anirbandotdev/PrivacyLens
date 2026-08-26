@@ -70,16 +70,24 @@ export function validateAgentActions(actions) {
         ...(action.intent ? { intent: action.intent } : {})
       });
     } else if (type === "select") {
+      if (action.valueToken !== undefined) {
+        throw new Error("Invalid action: select action does not permit valueToken.");
+      }
+
+      if (typeof action.value !== "string" || action.value.trim().length === 0) {
+        throw new Error("Invalid action: select action requires a non-empty value string.");
+      }
+
+      if (SENSITIVE_VALUE_REGEX.test(action.value)) {
+        throw new Error("Invalid action: sensitive values must require local user entry.");
+      }
+
       const normalizedSelect = {
         type: "select",
-        targetId: action.targetId
+        targetId: action.targetId,
+        value: action.value
       };
-      if (typeof action.value === "string") {
-        if (SENSITIVE_VALUE_REGEX.test(action.value)) {
-          throw new Error("Invalid action: sensitive values must require local user entry.");
-        }
-        normalizedSelect.value = action.value;
-      }
+
       if (action.intent) {
         normalizedSelect.intent = action.intent;
       }
