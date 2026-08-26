@@ -11,18 +11,25 @@ export async function textReader(link) {
     workerBlobURL: false,
   });
 
+  console.log(link);
+
   const ret = await worker.recognize(
     link,
     {},
     {
-        blocks: true
-    }
-    );
+      blocks: true,
+    },
+  );
 
   console.log(ret.data.blocks[0].paragraphs[0].lines);
 
-  const line = ret.data.blocks[0].paragraphs[0].lines
+  const line = ret.data.blocks[0].paragraphs[0].lines;
 
   await worker.terminate();
-  return line
+  return line;
+}
+
+export async function extractText(image) {
+  const result = await Tesseract.recognize(image, "eng");
+  return result.data;
 }
