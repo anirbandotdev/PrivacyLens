@@ -10,6 +10,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tesseract.js": "^7.0.0",

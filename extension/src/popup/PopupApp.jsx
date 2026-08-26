@@ -5,13 +5,13 @@ import PromptBox from "../components/PromptBox.jsx";
 import ActionConfirmation from "../components/ActionPerm.jsx";
 import { textReader } from "../vision/ocr.js";
 import { detectPII } from "../vision/pii-detector.js";
+import { redactRegion } from "../vision/redact.js";
 
-const PRIVACY_LEVELS = [
-  { key: "low", label: "Low", desc: "Token replacement only" },
-  { key: "medium", label: "Medium", desc: "Tokens + face blur" },
-  { key: "high", label: "High", desc: "Full PII redaction" },
-];
-
+// const PRIVACY_LEVELS = [
+//   { key: "low", label: "Low", desc: "Token replacement only" },
+//   { key: "medium", label: "Medium", desc: "Tokens + face blur" },
+//   { key: "high", label: "High", desc: "Full PII redaction" },
+// ];
 
 export default function PopupApp() {
   const [agentActive, setAgentActive] = useState(false);
@@ -45,8 +45,8 @@ export default function PopupApp() {
 
       console.log("Screenshot captured successfully");
       // console.log(response.screenshot);
-      const ocrLine = await textReader(response.screenshot);
-      const piiMatches = detectPII(ocrLine);
+      textReader(response.screenshot);
+      // const piiMatches = detectPII(ocrLine);
       // console.log("OCR line:", ocrLine);
       // console.log("PII findings:", piiMatches);
     } catch (error) {
@@ -185,4 +185,3 @@ export default function PopupApp() {
     </div>
   );
 }
-
