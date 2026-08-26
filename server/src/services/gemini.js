@@ -117,15 +117,32 @@ export async function analyzeWithGemini(arg1, arg2, arg3) {
 
   const ai = new GoogleGenAI({ apiKey });
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3.7-flash",
-    contents,
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      responseMimeType: "application/json",
-      responseJsonSchema: RESPONSE_JSON_SCHEMA,
-    },
-  });
+  const delays = [1000, 2000];
+  const maxAttempts = 3;
+  let response;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          responseMimeType: "application/json",
+          responseJsonSchema: RESPONSE_JSON_SCHEMA,
+        },
+      });
+      break;
+    } catch (error) {
+      const isRetryable = error?.status === 429 || error?.status === 503;
+      if (isRetryable && attempt < maxAttempts) {
+        const delayMs = delays[attempt - 1];
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw error;
+    }
+  }
 
   const responseText = response.text?.trim() || "{}";
 
