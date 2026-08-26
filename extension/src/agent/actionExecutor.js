@@ -1,6 +1,10 @@
 import { validateAgentActions } from "./actionValidator.js";
 
-function runInjectedActions(actions) {
+function runInjectedActions(actions, confirmedActionIndexes = []) {
+  const confirmedSet = new Set(
+    Array.isArray(confirmedActionIndexes) ? confirmedActionIndexes : []
+  );
+
   const SENSITIVE_DOM_REGEX = /(?:password|passwd|passcode|pwd|otp|one[-_ ]?time[-_ ]?code|pin|cvv|cvc|security[-_ ]?code|card[-_ ]?number|credit[-_ ]?card|debit[-_ ]?card|cc[-_ ]?number|cc[-_ ]?csc)/i;
 
   function isElementVisible(el) {
@@ -85,8 +89,9 @@ function runInjectedActions(actions) {
 
   for (let i = 0; i < actions.length; i++) {
     const action = actions[i];
+    const isExplicitlyConfirmed = confirmedSet.has(i);
 
-    if (action.requiresConfirmation === true) {
+    if (action.requiresConfirmation === true && !isExplicitlyConfirmed) {
       results.push({
         actionIndex: i,
         type: action.type,
@@ -169,7 +174,7 @@ function runInjectedActions(actions) {
     }
 
     if (action.type === "click") {
-      if (isHighImpactClick(targetEl, action)) {
+      if (isHighImpactClick(targetEl, action) && !isExplicitlyConfirmed) {
         results.push({
           actionIndex: i,
           type: action.type,
@@ -289,8 +294,39 @@ function runInjectedActions(actions) {
   return results;
 }
 
-export async function executeActionsInActiveTab(actions) {
+export async function executeActionsInActiveTab(actions, options = {}) {
   const validatedActions = validateAgentActions(actions);
+
+  if (options !== null && typeof options !== "object") {
+    throw new Error("Invalid options: options must be an object.");
+  }
+
+  let confirmedActionIndexes = [];
+  if (options?.confirmedActionIndexes !== undefined) {
+    if (!Array.isArray(options.confirmedActionIndexes)) {
+      throw new Error("Invalid confirmedActionIndexes: must be an array.");
+    }
+
+    const seen = new Set();
+    for (const idx of options.confirmedActionIndexes) {
+      if (
+        typeof idx !== "number" ||
+        !Number.isInteger(idx) ||
+        idx < 0 ||
+        idx >= validatedActions.length
+      ) {
+        throw new Error("Invalid confirmedActionIndexes: index must be a non-negative integer within bounds.");
+      }
+
+      if (seen.has(idx)) {
+        throw new Error("Invalid confirmedActionIndexes: duplicate index found.");
+      }
+
+      seen.add(idx);
+    }
+
+    confirmedActionIndexes = Array.from(seen);
+  }
 
   const browserApi = globalThis.browser ?? globalThis.chrome;
   if (!browserApi?.tabs?.query || !browserApi?.scripting?.executeScript) {
@@ -306,7 +342,7 @@ export async function executeActionsInActiveTab(actions) {
   const executionResults = await browserApi.scripting.executeScript({
     target: { tabId: activeTab.id },
     func: runInjectedActions,
-    args: [validatedActions]
+    args: [validatedActions, confirmedActionIndexes]
   });
 
   return executionResults?.[0]?.result ?? [];
