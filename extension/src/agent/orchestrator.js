@@ -1,4 +1,6 @@
 import { analyzeSanitizedContext } from "../api/analyzeClient.js";
+import { validateAgentActions } from "./actionValidator.js";
+import { routeLocalPrompt } from "./localIntentRouter.js";
 
 const FORBIDDEN_RAW_KEYS = ["rawScreenshot", "originalScreenshot", "rawText", "originalText"];
 
@@ -31,12 +33,24 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
     throw new Error("A non-empty prompt string is required.");
   }
 
+  const cleanedPrompt = prompt.trim();
+  const localRouteResult = routeLocalPrompt(cleanedPrompt);
+
+  if (localRouteResult?.decision === "local") {
+    const validatedActions = validateAgentActions(localRouteResult.actions ?? []);
+    return {
+      source: "local",
+      message: localRouteResult.message,
+      actions: validatedActions
+    };
+  }
+
   if (typeof buildPrivateContext !== "function") {
     throw new Error("buildPrivateContext must be a function.");
   }
 
   const contextResult = await buildPrivateContext({
-    prompt: prompt.trim()
+    prompt: cleanedPrompt
   });
 
   if (!contextResult || typeof contextResult !== "object") {
@@ -50,10 +64,11 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
   const { decision } = contextResult;
 
   if (decision === "local") {
+    const validatedActions = validateAgentActions(contextResult.actions ?? []);
     return {
       source: "local",
       message: contextResult.message,
-      actions: contextResult.actions || []
+      actions: validatedActions
     };
   }
 
@@ -64,6 +79,13 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
   if (decision === "server") {
     if (contextResult.privacyVerified !== true) {
       throw new Error("Privacy verification failed: privacyVerified must strictly equal true for server analysis.");
+    }
+
+    if (
+      typeof contextResult.sanitizedPrompt !== "string" ||
+      contextResult.sanitizedPrompt.trim().length === 0
+    ) {
+      throw new Error("Server processing requires a non-empty sanitizedPrompt.");
     }
 
     const hasSanitizedText =
@@ -78,15 +100,18 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
     }
 
     const serverResult = await analyzeSanitizedContext({
-      prompt: prompt.trim(),
+      prompt: contextResult.sanitizedPrompt.trim(),
       sanitizedText: contextResult.sanitizedText,
       sanitizedScreenshot: contextResult.sanitizedScreenshot,
       redactionSummary: contextResult.redactionSummary ?? {},
       privacyVerified: contextResult.privacyVerified
     });
 
+    const validatedActions = validateAgentActions(serverResult?.actions ?? []);
+
     return {
       ...serverResult,
+      actions: validatedActions,
       source: "server"
     };
   }
