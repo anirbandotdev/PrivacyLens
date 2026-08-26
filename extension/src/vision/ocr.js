@@ -10,8 +10,6 @@ export async function textReader(link) {
     corePath: browserAPI.runtime.getURL("tesseract-core/"), // Path to your local core file
     workerBlobURL: false,
   });
-  
-  console.log(link);
 
   const ret = await worker.recognize(
     link,
@@ -27,9 +25,4 @@ export async function textReader(link) {
 
   await worker.terminate();
   return line
-}
-
-export async function extractText(image) {
-  const result = await Tesseract.recognize(image, "eng");
-  return result.data;
 }

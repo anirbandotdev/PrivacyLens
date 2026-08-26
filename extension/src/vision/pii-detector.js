@@ -32,7 +32,5 @@ export function detectPII(lines) {
     }
   }
 
-  console.log(findings);
-
   return findings;
 }
