@@ -5,7 +5,19 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
     Array.isArray(confirmedActionIndexes) ? confirmedActionIndexes : []
   );
 
-  const SENSITIVE_DOM_REGEX = /(?:password|passwd|passcode|pwd|otp|one[-_ ]?time[-_ ]?code|pin|cvv|cvc|security[-_ ]?code|card[-_ ]?number|credit[-_ ]?card|debit[-_ ]?card|cc[-_ ]?number|cc[-_ ]?csc)/i;
+  const SENSITIVE_FIELD_REGEX = /\b(?:password\d*|passwd\d*|passcode\d*|pwd\d*|otp\d*|pin\d*|cvv\d*|cvc\d*|cid\d*|one\s+time\s+(?:code|password)|security\s+code|card\s+number|credit\s+card|debit\s+card|cc\s+number|cc\s+csc|cc\s+cvc|cc\s+cvv)\b/i;
+
+  function normalizeDescriptor(str) {
+    if (typeof str !== "string") {
+      return "";
+    }
+    return str
+      .replace(/([a-z\d])([A-Z])/g, "$1 $2")
+      .replace(/([A-Z]+)([A-Z][a-z\d])/g, "$1 $2")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
 
   function isElementVisible(el) {
     if (!el || !(el instanceof Element)) {
@@ -34,25 +46,17 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
     if (!el) {
       return false;
     }
-    const typeAttr = (el.getAttribute("type") || el.type || "").toLowerCase();
-    if (typeAttr === "password") {
+    const typeAttr = el.getAttribute("type") || el.type || "";
+    if (typeAttr.toLowerCase() === "password") {
       return true;
     }
 
-    const autocompleteAttr = (el.getAttribute("autocomplete") || "").toLowerCase();
-    if (
-      autocompleteAttr.includes("password") ||
-      autocompleteAttr.includes("one-time-code") ||
-      autocompleteAttr.includes("cc-")
-    ) {
-      return true;
-    }
-
-    const nameAttr = (el.getAttribute("name") || "").toLowerCase();
-    const idAttr = (el.getAttribute("id") || el.id || "").toLowerCase();
+    const autocompleteAttr = el.getAttribute("autocomplete") || "";
+    const nameAttr = el.getAttribute("name") || "";
+    const idAttr = el.getAttribute("id") || el.id || "";
     const combined = `${typeAttr} ${autocompleteAttr} ${nameAttr} ${idAttr}`;
 
-    return SENSITIVE_DOM_REGEX.test(combined);
+    return SENSITIVE_FIELD_REGEX.test(normalizeDescriptor(combined));
   }
 
   const HIGH_IMPACT_CLICK_REGEX = new RegExp(

@@ -15,7 +15,24 @@ const ALLOWED_SCROLL_DIRECTIONS = new Set([
 
 const TARGET_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
 
-const SENSITIVE_FIELD_REGEX = /(?:password|passwd|passcode|otp|one[-_ ]?time[-_ ]?code|pin|cvv|cvc|security[-_ ]?code|card[-_ ]?number|credit[-_ ]?card|debit[-_ ]?card)/i;
+const SENSITIVE_FIELD_REGEX = /\b(?:password\d*|passwd\d*|passcode\d*|pwd\d*|otp\d*|pin\d*|cvv\d*|cvc\d*|cid\d*|one\s+time\s+(?:code|password)|security\s+code|card\s+number|credit\s+card|debit\s+card|cc\s+number|cc\s+csc|cc\s+cvc|cc\s+cvv)\b/i;
+
+function normalizeDescriptor(str) {
+  if (typeof str !== "string") {
+    return "";
+  }
+  return str
+    .replace(/([a-z\d])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z\d])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function isSensitiveFieldDescriptor(descriptor) {
+  const normalized = normalizeDescriptor(descriptor);
+  return SENSITIVE_FIELD_REGEX.test(normalized);
+}
 
 const SENSITIVE_VALUE_REGEX = new RegExp(
   [
@@ -93,8 +110,8 @@ export function validateAgentActions(actions) {
       }
       normalizedActions.push(normalizedSelect);
     } else if (type === "type") {
-      const fieldDescriptor = `${action.targetId || ""} ${action.intent || ""}`.toLowerCase();
-      if (SENSITIVE_FIELD_REGEX.test(fieldDescriptor)) {
+      const fieldDescriptor = `${action.targetId || ""} ${action.intent || ""}`;
+      if (isSensitiveFieldDescriptor(fieldDescriptor)) {
         throw new Error("Invalid action: typing into sensitive fields is not permitted.");
       }
 
