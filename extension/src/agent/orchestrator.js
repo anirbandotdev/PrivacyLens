@@ -1,5 +1,6 @@
 import { analyzeSanitizedContext } from "../api/analyzeClient.js";
 import { validateAgentActions } from "./actionValidator.js";
+import { routeLocalPrompt } from "./localIntentRouter.js";
 
 const FORBIDDEN_RAW_KEYS = ["rawScreenshot", "originalScreenshot", "rawText", "originalText"];
 
@@ -32,12 +33,24 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
     throw new Error("A non-empty prompt string is required.");
   }
 
+  const cleanedPrompt = prompt.trim();
+  const localRouteResult = routeLocalPrompt(cleanedPrompt);
+
+  if (localRouteResult?.decision === "local") {
+    const validatedActions = validateAgentActions(localRouteResult.actions ?? []);
+    return {
+      source: "local",
+      message: localRouteResult.message,
+      actions: validatedActions
+    };
+  }
+
   if (typeof buildPrivateContext !== "function") {
     throw new Error("buildPrivateContext must be a function.");
   }
 
   const contextResult = await buildPrivateContext({
-    prompt: prompt.trim()
+    prompt: cleanedPrompt
   });
 
   if (!contextResult || typeof contextResult !== "object") {
