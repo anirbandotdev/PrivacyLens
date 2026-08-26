@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import StatusBadge from "../components/StatusBadge.jsx";
 import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
+import PromptBox from "../components/PromptBox.jsx";
 import { textReader } from "../vision/ocr.js";
 import { detectPII } from "../vision/pii-detector.js";
 
