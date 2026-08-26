@@ -66,6 +66,13 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
       throw new Error("Privacy verification failed: privacyVerified must strictly equal true for server analysis.");
     }
 
+    if (
+      typeof contextResult.sanitizedPrompt !== "string" ||
+      contextResult.sanitizedPrompt.trim().length === 0
+    ) {
+      throw new Error("Server processing requires a non-empty sanitizedPrompt.");
+    }
+
     const hasSanitizedText =
       typeof contextResult.sanitizedText === "string" &&
       contextResult.sanitizedText.trim().length > 0;
@@ -78,7 +85,7 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
     }
 
     const serverResult = await analyzeSanitizedContext({
-      prompt: prompt.trim(),
+      prompt: contextResult.sanitizedPrompt.trim(),
       sanitizedText: contextResult.sanitizedText,
       sanitizedScreenshot: contextResult.sanitizedScreenshot,
       redactionSummary: contextResult.redactionSummary ?? {},
