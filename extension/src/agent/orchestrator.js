@@ -1,4 +1,5 @@
 import { analyzeSanitizedContext } from "../api/analyzeClient.js";
+import { validateAgentActions } from "./actionValidator.js";
 
 const FORBIDDEN_RAW_KEYS = ["rawScreenshot", "originalScreenshot", "rawText", "originalText"];
 
@@ -50,10 +51,11 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
   const { decision } = contextResult;
 
   if (decision === "local") {
+    const validatedActions = validateAgentActions(contextResult.actions ?? []);
     return {
       source: "local",
       message: contextResult.message,
-      actions: contextResult.actions || []
+      actions: validatedActions
     };
   }
 
@@ -92,8 +94,11 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
       privacyVerified: contextResult.privacyVerified
     });
 
+    const validatedActions = validateAgentActions(serverResult?.actions ?? []);
+
     return {
       ...serverResult,
+      actions: validatedActions,
       source: "server"
     };
   }
