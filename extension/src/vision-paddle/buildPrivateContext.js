@@ -44,21 +44,28 @@ export async function buildPrivateContext({ prompt, screenshot } = {}) {
 
   const ocrResults = await extractText(screenshot);
 
-  if (
-    !Array.isArray(ocrResults) ||
-    ocrResults.length === 0 ||
-    !ocrResults.every(
-      (item) =>
-        item && typeof item.text === "string" && item.text.trim().length > 0
-    )
-  ) {
+  if (!Array.isArray(ocrResults) || ocrResults.length === 0) {
     return {
       decision: "blocked",
       message: "Privacy verification could not be completed.",
     };
   }
 
-  const piiResults = (await detectPII(ocrResults)) || [];
+  const usableOcrResults = ocrResults.filter(
+    (item) =>
+      item && typeof item.text === "string" && item.text.trim().length > 0
+  );
+
+  if (usableOcrResults.length === 0) {
+    return {
+      decision: "blocked",
+      message: "Privacy verification could not be completed.",
+    };
+  }
+
+  const discardedOcrRegions = ocrResults.length - usableOcrResults.length;
+
+  const piiResults = (await detectPII(usableOcrResults)) || [];
 
   if (!piiResults.every((item) => isValidPiiBox(item?.box))) {
     return {
@@ -69,32 +76,42 @@ export async function buildPrivateContext({ prompt, screenshot } = {}) {
 
   const piiBoxSet = new Set(piiResults.map((r) => r.box));
 
-  const sanitizedText = ocrResults
+  const sanitizedText = usableOcrResults
     .map((item) => (piiBoxSet.has(item.box) ? "[REDACTED]" : item.text))
     .join("\n");
 
-  const redactedBlob = await redactImage(screenshot, piiResults);
-  const sanitizedScreenshot = await blobToDataURL(redactedBlob);
+  let sanitizedScreenshot;
+  if (discardedOcrRegions === 0) {
+    const redactedBlob = await redactImage(screenshot, piiResults);
+    sanitizedScreenshot = await blobToDataURL(redactedBlob);
 
-  if (
-    typeof sanitizedScreenshot !== "string" ||
-    !BASE64_IMAGE_DATA_URL_REGEX.test(sanitizedScreenshot)
-  ) {
-    return {
-      decision: "blocked",
-      message: "Privacy verification could not be completed.",
-    };
+    if (
+      typeof sanitizedScreenshot !== "string" ||
+      !BASE64_IMAGE_DATA_URL_REGEX.test(sanitizedScreenshot)
+    ) {
+      return {
+        decision: "blocked",
+        message: "Privacy verification could not be completed.",
+      };
+    }
   }
 
-  return {
+  const result = {
     decision: "server",
     sanitizedPrompt: prompt.trim(),
     sanitizedText,
-    sanitizedScreenshot,
     redactionSummary: {
       detectedRegions: piiResults.length,
       redactedRegions: piiResults.length,
+      discardedOcrRegions,
+      screenshotIncluded: discardedOcrRegions === 0,
     },
     privacyVerified: true,
   };
+
+  if (discardedOcrRegions === 0) {
+    result.sanitizedScreenshot = sanitizedScreenshot;
+  }
+
+  return result;
 }
