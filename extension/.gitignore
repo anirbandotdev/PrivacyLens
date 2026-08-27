@@ -1,4 +1,4 @@
 node_modules
 dist
 *.local
-public/models/
+public/models/broadfield-dev/

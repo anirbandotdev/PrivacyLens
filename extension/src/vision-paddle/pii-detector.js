@@ -1,7 +1,7 @@
 import { getPIIModel } from "./pii-ner";
 import { aggregatePIIEntities } from "./aggregateEntities";
 
-const NER_THRESHOLD = 0.3;
+const NER_THRESHOLD = 0.9;
 
 export async function detectPII(items) {
   const model = await getPIIModel();

@@ -117,32 +117,7 @@ export default function PopupApp() {
         </div>
         <StatusBadge status={status} />
       </header>
-
-      {/* User Prompt */}
-      <div className="popup__section">
-        <PromptBox
-          prompt={prompt}
-          onPromptChange={setPrompt}
-          onSubmit={handlePromptSubmit}
-          disabled={capturing}
-        />
-      </div>
-
-      {/* Main Toggle */}
-      <div className="popup__section">
-        <button
-          className={`popup__agent-btn ${agentActive ? "popup__agent-btn--active" : ""}`}
-          onClick={handleToggleAgent}
-        >
-          <span className="popup__agent-btn-icon">
-            {agentActive ? "⏸" : "▶"}
-          </span>
-          <span className="popup__agent-btn-label">
-            {agentActive ? "Stop Agent" : "Start Agent"}
-          </span>
-        </button>
-      </div>
-
+      
       <div>
         {screenshot && (
           <div className="popup__section">
@@ -187,6 +162,32 @@ export default function PopupApp() {
           </div>
         )}
       </div>
+
+      {/* User Prompt */}
+      <div className="popup__section">
+        <PromptBox
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSubmit={handlePromptSubmit}
+          disabled={capturing}
+        />
+      </div>
+
+      {/* Main Toggle */}
+      <div className="popup__section">
+        <button
+          className={`popup__agent-btn ${agentActive ? "popup__agent-btn--active" : ""}`}
+          onClick={handleToggleAgent}
+        >
+          <span className="popup__agent-btn-icon">
+            {agentActive ? "⏸" : "▶"}
+          </span>
+          <span className="popup__agent-btn-label">
+            {agentActive ? "Stop Agent" : "Start Agent"}
+          </span>
+        </button>
+      </div>
+
 
       {/* Privacy Level */}
       {/* <div className="popup__section">
