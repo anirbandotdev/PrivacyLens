@@ -3,9 +3,13 @@ import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import PromptBox from "../components/PromptBox.jsx";
 import ActionConfirmation from "../components/ActionPerm.jsx";
-import { textReader } from "../vision/ocr.js";
-import { detectPII } from "../vision/pii-detector.js";
-import { redactRegion } from "../vision/redact.js";
+import { extractText } from "../vision-paddle/paddleocr.js";
+import { filterOCRResults } from "../vision-paddle/filterocr.js";
+import { getPIIModel } from "../vision-paddle/pii-ner.js";
+import { aggregatePIIEntities } from "../vision-paddle/aggregateEntities.js";
+import { detectPII } from "../vision-paddle/pii-detector.js";
+import { redactImage } from "../vision-paddle/redactImage.js";
+import { blobToDataURL } from "../vision-paddle/blobToDataUrl.js";
 
 // const PRIVACY_LEVELS = [
 //   { key: "low", label: "Low", desc: "Token replacement only" },
@@ -44,11 +48,15 @@ export default function PopupApp() {
       setScreenshot(response.screenshot);
 
       console.log("Screenshot captured successfully");
-      // console.log(response.screenshot);
-      textReader(response.screenshot);
-      // const piiMatches = detectPII(ocrLine);
-      // console.log("OCR line:", ocrLine);
-      // console.log("PII findings:", piiMatches);
+
+      console.log(response.screenshot);
+      const extractTextFromImg = await extractText(response.screenshot);
+      const piiResults = await detectPII(extractTextFromImg);
+      const redactedBlob = await redactImage(response.screenshot, piiResults);
+      const redactedImage = await blobToDataURL(redactedBlob);
+
+      console.log(redactedImage);
+
     } catch (error) {
       console.error("Screen capture error:", error);
 
