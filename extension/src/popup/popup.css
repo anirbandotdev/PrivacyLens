@@ -60,6 +60,17 @@
 }
 
 
+/* Agent Message */
+.popup__agent-message {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 /* Agent Button */
 .popup__agent-btn {
   display: flex;

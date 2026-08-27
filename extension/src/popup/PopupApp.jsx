@@ -7,6 +7,8 @@ import { extractText } from "../vision-paddle/paddleocr.js";
 import { detectPII } from "../vision-paddle/pii-detector.js";
 import { redactImage } from "../vision-paddle/redactImage.js";
 import { blobToDataURL } from "../vision-paddle/blobToDataUrl.js";
+import { runPrivacyAgent } from "../agent/orchestrator.js";
+import { buildPrivateContext } from "../vision-paddle/buildPrivateContext.js";
 
 // const PRIVACY_LEVELS = [
 //   { key: "low", label: "Low", desc: "Token replacement only" },
@@ -27,6 +29,8 @@ export default function PopupApp() {
   const [processing, setProcessing] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
+  const [agentMessage, setAgentMessage] = useState(null);
+  const [plannedActions, setPlannedActions] = useState([]);
 
   const startAgentFlow = useCallback(async () => {
     setAgentActive(true);
@@ -80,11 +84,72 @@ export default function PopupApp() {
     startAgentFlow();
   }, [agentActive, startAgentFlow]);
 
-  const handlePromptSubmit = useCallback(() => {
-    if (!agentActive) {
-      startAgentFlow();
-    }
-  }, [agentActive, startAgentFlow]);
+  const handlePromptSubmit = useCallback(
+    async (cleanedPrompt) => {
+      const targetPrompt =
+        typeof cleanedPrompt === "string" ? cleanedPrompt : prompt.trim();
+      if (!targetPrompt) return;
+
+      setAgentActive(true);
+      setStatus("observing");
+      setCaptureError(null);
+      setAgentMessage(null);
+      setPlannedActions([]);
+      setProcessing(true);
+
+      try {
+        const result = await runPrivacyAgent({
+          prompt: targetPrompt,
+          buildPrivateContext: async ({ prompt: contextPrompt }) => {
+            setCapturing(true);
+            try {
+              const browserAPI = globalThis.browser || globalThis.chrome;
+              const response = await browserAPI.runtime.sendMessage({
+                type: "CAPTURE_SCREEN",
+              });
+
+              if (!response?.success) {
+                throw new Error(response?.error || "Screen capture failed");
+              }
+
+              setScreenshot(response.screenshot);
+
+              const contextResult = await buildPrivateContext({
+                prompt: contextPrompt,
+                screenshot: response.screenshot,
+              });
+
+              if (contextResult?.sanitizedScreenshot) {
+                setRedactedImage(contextResult.sanitizedScreenshot);
+              }
+
+              return contextResult;
+            } finally {
+              setCapturing(false);
+            }
+          },
+        });
+
+        if (result?.message) {
+          setAgentMessage(result.message);
+        }
+        if (result?.actions) {
+          setPlannedActions(result.actions);
+        }
+        setStatus("idle");
+      } catch (error) {
+        console.error("Agent execution error:", error);
+        setCaptureError(error.message);
+        setAgentMessage("Failed to process request. Please try again.");
+        setStatus("error");
+        setAgentActive(false);
+      } finally {
+        setProcessing(false);
+        setCapturing(false);
+      }
+    },
+    [prompt],
+  );
 
   const openDashboard = useCallback(() => {
     const url = chrome?.runtime?.getURL
@@ -169,8 +234,13 @@ export default function PopupApp() {
           prompt={prompt}
           onPromptChange={setPrompt}
           onSubmit={handlePromptSubmit}
-          disabled={capturing}
+          disabled={capturing || processing}
         />
+        {agentMessage && (
+          <div className="popup__agent-message" role="status">
+            {agentMessage}
+          </div>
+        )}
       </div>
 
       {/* Main Toggle */}
