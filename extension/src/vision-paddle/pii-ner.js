@@ -27,12 +27,5 @@ export async function getPIIModel() {
     console.log("PII NER model loaded.");
   }
 
-//   const res = await classifier(
-    // "My name is Bidyut and my email is bidyut@gmail.com"
-//   );
-
-    // console.log("Classifier data: ",res);
-
-    // return res;
   return classifier;
 }

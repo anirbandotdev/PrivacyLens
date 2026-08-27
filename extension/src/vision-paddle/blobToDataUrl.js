@@ -1,14 +1,13 @@
 export async function blobToDataURL(blob) {
-    return await new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
 
-        const reader = new FileReader();
+    reader.onloadend = () => {
+      resolve(reader.result);
+    };
 
-        reader.onloadend = () => {
-            resolve(reader.result);
-        };
+    reader.onerror = reject;
 
-        reader.onerror = reject;
-
-        reader.readAsDataURL(blob);
-    });
+    reader.readAsDataURL(blob);
+  });
 }

@@ -66,7 +66,6 @@ async function base64ToPixels(dataUrl) {
 
 export async function getOCR() {
   try {
-    // Reuse already initialized OCR
     if (ocrInstance) {
       return ocrInstance;
     }
@@ -84,10 +83,6 @@ export async function getOCR() {
     const dictionaryURL = browserAPI.runtime.getURL(
       "models/paddleocr/dictionary.txt",
     );
-
-    // console.log("Detection model:", detectionURL);
-
-    // console.log("Recognition model:", recognitionURL);
 
     console.log("Dictionary:", dictionaryURL);
 
@@ -142,30 +137,15 @@ export async function extractText(image) {
 
   console.log("Running OCR...");
 
-  let result = [];
-
   const results = await ocr.recognize(pixels, {
     detection: {
       textPixelThreshold: 0.4,
       boxScoreThreshold: 0.6,
       maxSideLimit: 1600,
     },
-    onProgress(event) {
-      // console.log(event);
-
-      // console.log("OCR:", event.type, event.stage, event.progress);
-
-      // if (event.type === "det" && event.stage === "postprocess") {
-      //   console.log("Detected text regions:", event.detectedCount);
-      // }
-
-      if (event.type === "rec" && event.stage === "item") {
-        console.log("Recognized:", event.result);
-      }
-    },
   });
 
-  console.log("OCR results:", results);
+  // console.log("OCR results:", results);
 
   return results;
 }

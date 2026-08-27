@@ -26,6 +26,8 @@ export default function PopupApp() {
   const [captureError, setCaptureError] = useState(null);
   const [capturing, setCapturing] = useState(false);
   const [screenshot, setScreenshot] = useState(null);
+  const [redactedImage, setRedactedImage] = useState(null);
+  const [processing, setProcessing] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
 
@@ -34,6 +36,8 @@ export default function PopupApp() {
     setStatus("observing");
     setCaptureError(null);
     setCapturing(true);
+    setRedactedImage(null);
+    setProcessing(true);
 
     try {
       const browserAPI = globalThis.browser || globalThis.chrome;
@@ -53,16 +57,17 @@ export default function PopupApp() {
       const extractTextFromImg = await extractText(response.screenshot);
       const piiResults = await detectPII(extractTextFromImg);
       const redactedBlob = await redactImage(response.screenshot, piiResults);
-      const redactedImage = await blobToDataURL(redactedBlob);
-
-      console.log(redactedImage);
-
+      const redactedDataURL = await blobToDataURL(redactedBlob);
+      setRedactedImage(redactedDataURL);
+      setProcessing(false);
+      console.log(redactedDataURL);
     } catch (error) {
       console.error("Screen capture error:", error);
 
       setCaptureError(error.message);
       setStatus("error");
       setAgentActive(false);
+      setProcessing(false);
     } finally {
       setCapturing(false);
     }
@@ -91,8 +96,19 @@ export default function PopupApp() {
     window.open(url, "_blank");
   }, []);
 
+  const handleDownload = useCallback(() => {
+    if (!redactedImage) return;
+    const a = document.createElement("a");
+    a.href = redactedImage;
+    a.download = `privacylens-redacted-${Date.now()}.png`;
+    a.click();
+  }, [redactedImage]);
+
   return (
     <div className="popup">
+      {/* Agent Running Indicator */}
+      {agentActive && processing && <div className="popup__agent-indicator" />}
+
       {/* Header */}
       <header className="popup__header">
         <div className="popup__brand">
@@ -133,15 +149,44 @@ export default function PopupApp() {
       <div>
         {screenshot && (
           <div className="popup__section">
-            <h2 className="popup__section-title">Current Screen</h2>
+            <div className="popup__screen-header">
+              <h2 className="popup__section-title">
+                {redactedImage ? "Redacted Screen" : "Current Screen"}
+              </h2>
+              {(agentActive || processing) && (
+                <div className="popup__running-badge">
+                  <span className="popup__running-dot" />
+                  <span className="popup__running-text">Running</span>
+                </div>
+              )}
+            </div>
 
-            <img
-              src={screenshot}
-              alt="Current browser screen"
-              style={{
-                width: "100%",
-              }}
-            />
+            <div className="popup__preview-wrap">
+              <img
+                src={redactedImage || screenshot}
+                alt={
+                  redactedImage
+                    ? "Redacted browser screen"
+                    : "Current browser screen"
+                }
+                className="popup__preview-img"
+              />
+              {(agentActive || processing) && (
+                <div
+                  className="popup__screen-live-indicator"
+                  title="Agent is running"
+                >
+                  <span className="popup__blinking-dot" />
+                </div>
+              )}
+            </div>
+
+            {redactedImage && (
+              <button className="popup__download-btn" onClick={handleDownload}>
+                <span className="popup__download-icon">📥</span>
+                Download Redacted Image
+              </button>
+            )}
           </div>
         )}
       </div>
