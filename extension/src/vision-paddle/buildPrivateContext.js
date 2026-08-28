@@ -22,7 +22,11 @@ function isValidPiiBox(box) {
   );
 }
 
-export async function buildPrivateContext({ prompt, screenshot } = {}) {
+export async function buildPrivateContext({
+  prompt,
+  screenshot,
+  domContext = [],
+} = {}) {
   if (typeof prompt !== "string" || prompt.trim().length === 0) {
     throw new Error("A non-empty prompt string is required.");
   }
@@ -32,6 +36,10 @@ export async function buildPrivateContext({ prompt, screenshot } = {}) {
     !BASE64_IMAGE_DATA_URL_REGEX.test(screenshot)
   ) {
     throw new Error("A valid screenshot is required.");
+  }
+
+  if (!Array.isArray(domContext) || domContext.length > 100) {
+    throw new Error("A valid domContext array with at most 100 entries is required.");
   }
 
   const promptPiiResults = await detectPII([{ text: prompt.trim() }]);
@@ -74,11 +82,124 @@ export async function buildPrivateContext({ prompt, screenshot } = {}) {
     };
   }
 
+  const seenTargetIds = new Set();
+  const candidateDomEntries = [];
+
+  for (let i = 0; i < domContext.length; i++) {
+    const entry = domContext[i];
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    if (
+      typeof entry.targetId !== "string" ||
+      entry.targetId.trim().length === 0 ||
+      entry.targetId.trim().length > 200
+    ) {
+      continue;
+    }
+
+    if (
+      typeof entry.elementType !== "string" ||
+      entry.elementType.trim().length === 0
+    ) {
+      continue;
+    }
+
+    if (
+      entry.controlType !== null &&
+      entry.controlType !== undefined &&
+      typeof entry.controlType !== "string"
+    ) {
+      continue;
+    }
+
+    if (
+      entry.role !== null &&
+      entry.role !== undefined &&
+      typeof entry.role !== "string"
+    ) {
+      continue;
+    }
+
+    if (
+      entry.label !== null &&
+      entry.label !== undefined &&
+      (typeof entry.label !== "string" || entry.label.trim().length > 120)
+    ) {
+      continue;
+    }
+
+    const targetId = entry.targetId.trim();
+    if (seenTargetIds.has(targetId)) {
+      continue;
+    }
+    seenTargetIds.add(targetId);
+
+    const elementType = entry.elementType.trim();
+    const controlType =
+      typeof entry.controlType === "string" ? entry.controlType.trim() : null;
+    const role = typeof entry.role === "string" ? entry.role.trim() : null;
+    const label = typeof entry.label === "string" ? entry.label.trim() : null;
+
+    candidateDomEntries.push({
+      entry: {
+        targetId,
+        elementType,
+        controlType,
+        role,
+        label,
+      },
+      index: i,
+    });
+  }
+
+  const domPiiItems = [];
+  for (const candidate of candidateDomEntries) {
+    if (candidate.entry.targetId) {
+      domPiiItems.push({
+        text: candidate.entry.targetId,
+        box: candidate.index,
+      });
+    }
+    if (candidate.entry.label) {
+      domPiiItems.push({
+        text: candidate.entry.label,
+        box: candidate.index,
+      });
+    }
+  }
+
+  const piiDomIndices = new Set();
+  if (domPiiItems.length > 0) {
+    const domPiiResults = (await detectPII(domPiiItems)) || [];
+    for (const res of domPiiResults) {
+      if (res && res.box !== undefined) {
+        piiDomIndices.add(res.box);
+      }
+    }
+  }
+
+  const includedDomEntries = [];
+  for (const candidate of candidateDomEntries) {
+    if (!piiDomIndices.has(candidate.index)) {
+      includedDomEntries.push(candidate.entry);
+    }
+  }
+
+  const includedDomElements = includedDomEntries.length;
+  const omittedDomElements = domContext.length - includedDomElements;
+
   const piiBoxSet = new Set(piiResults.map((r) => r.box));
 
-  const sanitizedText = usableOcrResults
+  let sanitizedText = usableOcrResults
     .map((item) => (piiBoxSet.has(item.box) ? "[REDACTED]" : item.text))
     .join("\n");
+
+  if (includedDomEntries.length > 0) {
+    const domLines = includedDomEntries.map((e) => JSON.stringify(e));
+    sanitizedText += `\n\nINTERACTIVE ELEMENTS — UNTRUSTED PAGE METADATA\n${domLines.join("\n")}`;
+  }
 
   let sanitizedScreenshot;
   if (discardedOcrRegions === 0) {
@@ -105,6 +226,8 @@ export async function buildPrivateContext({ prompt, screenshot } = {}) {
       redactedRegions: piiResults.length,
       discardedOcrRegions,
       screenshotIncluded: discardedOcrRegions === 0,
+      includedDomElements,
+      omittedDomElements,
     },
     privacyVerified: true,
   };

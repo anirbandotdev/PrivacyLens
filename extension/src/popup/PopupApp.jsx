@@ -1,14 +1,16 @@
 import { useCallback, useState } from "react";
-import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
-import StatusBadge from "../components/StatusBadge.jsx";
-import PromptBox from "../components/PromptBox.jsx";
+import { executeActionsInActiveTab } from "../agent/actionExecutor.js";
+import { collectSafeDomContextInActiveTab } from "../agent/domContextCollector.js";
+import { runPrivacyAgent } from "../agent/orchestrator.js";
 import ActionConfirmation from "../components/ActionPerm.jsx";
+import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
+import PromptBox from "../components/PromptBox.jsx";
+import StatusBadge from "../components/StatusBadge.jsx";
+import { blobToDataURL } from "../vision-paddle/blobToDataUrl.js";
+import { buildPrivateContext } from "../vision-paddle/buildPrivateContext.js";
 import { extractText } from "../vision-paddle/paddleocr.js";
 import { detectPII } from "../vision-paddle/pii-detector.js";
 import { redactImage } from "../vision-paddle/redactImage.js";
-import { blobToDataURL } from "../vision-paddle/blobToDataUrl.js";
-import { runPrivacyAgent } from "../agent/orchestrator.js";
-import { buildPrivateContext } from "../vision-paddle/buildPrivateContext.js";
 
 // const PRIVACY_LEVELS = [
 //   { key: "low", label: "Low", desc: "Token replacement only" },
@@ -84,6 +86,83 @@ export default function PopupApp() {
     startAgentFlow();
   }, [agentActive, startAgentFlow]);
 
+  const executeActionsSequentially = useCallback(
+    async (actions, startIndex = 0) => {
+      if (!Array.isArray(actions) || actions.length === 0) return;
+
+      for (let i = startIndex; i < actions.length; i++) {
+        const action = actions[i];
+        const executionResults = await executeActionsInActiveTab([action]);
+        const status = executionResults?.[0]?.status;
+
+        if (status === "executed") {
+          continue;
+        }
+
+        if (status === "requires_confirmation") {
+          setPendingAction({
+            action,
+            allActions: actions,
+            actionIndex: i,
+          });
+          return;
+        }
+
+        const safeStatus = status || "failed";
+        setCaptureError(`Action execution status: ${safeStatus}`);
+        setAgentMessage(`Action execution status: ${safeStatus}`);
+        setStatus("error");
+        setAgentActive(false);
+        return;
+      }
+
+      setStatus("idle");
+    },
+    [],
+  );
+
+  const handleApproveAction = useCallback(async () => {
+    if (!pendingAction) return;
+
+    const { action, allActions, actionIndex } = pendingAction;
+    setPendingAction(null);
+
+    try {
+      const executionResults = await executeActionsInActiveTab([action], {
+        confirmedActionIndexes: [0],
+      });
+      const status = executionResults?.[0]?.status;
+
+      if (status === "executed") {
+        await executeActionsSequentially(allActions, actionIndex + 1);
+      } else if (status === "requires_confirmation") {
+        setPendingAction({
+          action,
+          allActions,
+          actionIndex,
+        });
+      } else {
+        const safeStatus = status || "failed";
+        setCaptureError(`Action execution status: ${safeStatus}`);
+        setAgentMessage(`Action execution status: ${safeStatus}`);
+        setStatus("error");
+        setAgentActive(false);
+      }
+    } catch (error) {
+      console.error("Action execution error:", error);
+      setCaptureError(error.message);
+      setAgentMessage("Failed to process request. Please try again.");
+      setStatus("error");
+      setAgentActive(false);
+    }
+  }, [pendingAction, executeActionsSequentially]);
+
+  const handleRejectAction = useCallback(() => {
+    setPendingAction(null);
+    setAgentMessage("Action cancelled.");
+    setStatus("idle");
+  }, []);
+
   const handlePromptSubmit = useCallback(
     async (cleanedPrompt) => {
       const targetPrompt =
@@ -114,9 +193,21 @@ export default function PopupApp() {
 
               setScreenshot(response.screenshot);
 
+              let domContext = [];
+              try {
+                domContext = await collectSafeDomContextInActiveTab();
+              } catch (error) {
+                console.warn(
+                  "DOM context collection failed:",
+                  error instanceof Error ? error.message : "Unknown collector error."
+                );
+                domContext = [];
+              }
+
               const contextResult = await buildPrivateContext({
                 prompt: contextPrompt,
                 screenshot: response.screenshot,
+                domContext,
               });
 
               if (contextResult?.sanitizedScreenshot) {
@@ -136,7 +227,26 @@ export default function PopupApp() {
         if (result?.actions) {
           setPlannedActions(result.actions);
         }
-        setStatus("idle");
+
+        if (result?.source === "local") {
+          const executionResults = await executeActionsInActiveTab(
+            result.actions || [],
+          );
+          for (const execResult of executionResults || []) {
+            if (execResult?.status !== "executed") {
+              throw new Error(`Action execution status: ${execResult?.status || "failed"}`);
+            }
+          }
+          setStatus("idle");
+        } else if (result?.source === "server") {
+          if (Array.isArray(result.actions) && result.actions.length > 0) {
+            await executeActionsSequentially(result.actions, 0);
+          } else {
+            setStatus("idle");
+          }
+        } else {
+          setStatus("idle");
+        }
       } catch (error) {
         console.error("Agent execution error:", error);
         setCaptureError(error.message);
@@ -148,7 +258,7 @@ export default function PopupApp() {
         setCapturing(false);
       }
     },
-    [prompt],
+    [prompt, executeActionsSequentially],
   );
 
   const openDashboard = useCallback(() => {
@@ -182,7 +292,7 @@ export default function PopupApp() {
         </div>
         <StatusBadge status={status} />
       </header>
-      
+
       <div>
         {screenshot && (
           <div className="popup__section">
@@ -298,9 +408,9 @@ export default function PopupApp() {
       {/* Action Permission Dialog */}
       {pendingAction && (
         <ActionConfirmation
-          action={pendingAction}
-          onApprove={() => setPendingAction(null)}
-          onReject={() => setPendingAction(null)}
+          action={pendingAction.action}
+          onApprove={handleApproveAction}
+          onReject={handleRejectAction}
         />
       )}
     </div>
