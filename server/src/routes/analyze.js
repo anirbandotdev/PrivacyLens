@@ -1,6 +1,6 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
-import { analyzeWithGemini } from "../services/gemini.js";
+import { analyzeWithQwen } from "../services/qwen.js";
 
 const router = express.Router();
 
@@ -63,7 +63,7 @@ router.post("/", async (request, response) => {
   console.log(`[Request ID] ${requestId}`);
 
   try {
-    const analysis = await analyzeWithGemini({
+    const analysis = await analyzeWithQwen({
       prompt,
       sanitizedText,
       sanitizedScreenshot,
