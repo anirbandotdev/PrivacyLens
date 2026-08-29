@@ -193,20 +193,31 @@ export default function PopupApp() {
 
               setScreenshot(response.screenshot);
 
+              const extractTextFromImg = await extractText(response.screenshot);
+              const piiResults = await detectPII(extractTextFromImg);
+              const redactedBlob = await redactImage(
+                response.screenshot,
+                piiResults,
+              );
+              const redactedDataURL = await blobToDataURL(redactedBlob);
+              setRedactedImage(redactedDataURL);
+
               let domContext = [];
               try {
                 domContext = await collectSafeDomContextInActiveTab();
               } catch (error) {
                 console.warn(
                   "DOM context collection failed:",
-                  error instanceof Error ? error.message : "Unknown collector error."
+                  error instanceof Error
+                    ? error.message
+                    : "Unknown collector error.",
                 );
                 domContext = [];
               }
 
               const contextResult = await buildPrivateContext({
                 prompt: contextPrompt,
-                screenshot: response.screenshot,
+                screenshot: redactedDataURL,
                 domContext,
               });
 
@@ -234,7 +245,9 @@ export default function PopupApp() {
           );
           for (const execResult of executionResults || []) {
             if (execResult?.status !== "executed") {
-              throw new Error(`Action execution status: ${execResult?.status || "failed"}`);
+              throw new Error(
+                `Action execution status: ${execResult?.status || "failed"}`,
+              );
             }
           }
           setStatus("idle");
@@ -367,7 +380,6 @@ export default function PopupApp() {
           </span>
         </button>
       </div>
-
 
       {/* Privacy Level */}
       {/* <div className="popup__section">
