@@ -4,14 +4,11 @@ export default function PromptBox({
   prompt,
   onPromptChange,
   onSubmit,
-  disabled = false,
 }) {
   function handleSubmit(event) {
     event.preventDefault();
 
     const cleanedPrompt = prompt.trim();
-
-    if (!cleanedPrompt || disabled) return;
 
     onSubmit(cleanedPrompt);
   }
@@ -35,7 +32,6 @@ export default function PromptBox({
       <button
         className="prompt-box__submit"
         type="submit"
-        disabled={disabled || !prompt.trim()}
       >
         Start Task
       </button>

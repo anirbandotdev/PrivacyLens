@@ -167,7 +167,10 @@ export default function PopupApp() {
     async (cleanedPrompt) => {
       const targetPrompt =
         typeof cleanedPrompt === "string" ? cleanedPrompt : prompt.trim();
-      if (!targetPrompt) return;
+      if (!targetPrompt) {
+        startAgentFlow();
+        return;
+      };
 
       setAgentActive(true);
       setStatus("observing");
