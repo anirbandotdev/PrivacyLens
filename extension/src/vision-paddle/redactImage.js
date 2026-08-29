@@ -1,3 +1,5 @@
+import { getFaceDetector } from "../mediapipe/face-detector.js";
+
 export async function redactImage(imageDataUrl, piiResults) {
   const response = await fetch(imageDataUrl);
   const blob = await response.blob();
@@ -47,9 +49,40 @@ export async function redactImage(imageDataUrl, piiResults) {
     );
   }
 
+  const faceDetector = await getFaceDetector();
+
+  const faceResults = faceDetector.detect(bitmap);
+
+  for (const detection of faceResults.detections) {
+    const box = detection.boundingBox;
+
+    if (!box) {
+      continue;
+    }
+
+    console.log("REDACTING FACE:", box);
+
+    const paddingX = box.width * 0.15;
+    const paddingY = box.height * 0.2;
+
+    const x = Math.max(0, box.originX - paddingX);
+
+    const y = Math.max(0, box.originY - paddingY);
+
+    const right = Math.min(bitmap.width, box.originX + box.width + paddingX);
+
+    const bottom = Math.min(bitmap.height, box.originY + box.height + paddingY);
+
+    ctx.fillStyle = "#181818";
+
+    ctx.fillRect(x, y, right - x, bottom - y);
+  }
+
   const outputBlob = await canvas.convertToBlob({
     type: "image/png",
   });
+
+  bitmap.close();
 
   return outputBlob;
 }
