@@ -367,7 +367,7 @@ export default function PopupApp() {
       </div>
 
       {/* Main Toggle */}
-      <div className="popup__section">
+      {/* <div className="popup__section">
         <button
           className={`popup__agent-btn ${agentActive ? "popup__agent-btn--active" : ""}`}
           onClick={handleToggleAgent}
@@ -379,7 +379,7 @@ export default function PopupApp() {
             {agentActive ? "Stop Agent" : "Start Agent"}
           </span>
         </button>
-      </div>
+      </div> */}
 
       {/* Privacy Level */}
       {/* <div className="popup__section">
