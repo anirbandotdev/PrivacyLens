@@ -1,18 +1,28 @@
-import { FilesetResolver, FaceDetector } from "@mediapipe/tasks-vision";
+import {
+  FilesetResolver,
+  FaceDetector,
+  ObjectDetector,
+} from "@mediapipe/tasks-vision";
 
 const browserApi = globalThis.browser ?? globalThis.chrome;
+
+let faceDetectorPromise = null;
 
 async function createFaceDetector() {
   const wasmFileSet = browserApi.runtime.getURL("models/mediapipe/wasm");
   const modelPath = browserApi.runtime.getURL(
-    "models/mediapipe/blaze_face_short_range.tflite",
+    // "models/mediapipe/blaze_face_short_range.tflite", // Use FaceDetector class for this
+    "models/mediapipe/efficientdet-lite2.tflite", // Use ObjectDetector class for this
   );
 
   const vision = await FilesetResolver.forVisionTasks(wasmFileSet);
-  return await FaceDetector.createFromOptions(vision, {
+  return await ObjectDetector.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath: modelPath,
+      delegate: "CPU",
     },
+    scoreThreshold: 0.1, // use for ObjectDetector class only
+    categoryAllowlist: ["person", "clock"],
     runningMode: "IMAGE",
   });
 }
