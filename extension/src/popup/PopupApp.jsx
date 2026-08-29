@@ -193,15 +193,6 @@ export default function PopupApp() {
 
               setScreenshot(response.screenshot);
 
-              const extractTextFromImg = await extractText(response.screenshot);
-              const piiResults = await detectPII(extractTextFromImg);
-              const redactedBlob = await redactImage(
-                response.screenshot,
-                piiResults,
-              );
-              const redactedDataURL = await blobToDataURL(redactedBlob);
-              setRedactedImage(redactedDataURL);
-
               let domContext = [];
               try {
                 domContext = await collectSafeDomContextInActiveTab();
@@ -217,7 +208,7 @@ export default function PopupApp() {
 
               const contextResult = await buildPrivateContext({
                 prompt: contextPrompt,
-                screenshot: redactedDataURL,
+                screenshot: response.screenshot,
                 domContext,
               });
 
