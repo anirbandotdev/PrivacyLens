@@ -17,7 +17,7 @@ function isValidPiiBox(box) {
         typeof pt.x === "number" &&
         Number.isFinite(pt.x) &&
         typeof pt.y === "number" &&
-        Number.isFinite(pt.y)
+        Number.isFinite(pt.y),
     )
   );
 }
@@ -39,7 +39,9 @@ export async function buildPrivateContext({
   }
 
   if (!Array.isArray(domContext) || domContext.length > 100) {
-    throw new Error("A valid domContext array with at most 100 entries is required.");
+    throw new Error(
+      "A valid domContext array with at most 100 entries is required.",
+    );
   }
 
   const promptPiiResults = await detectPII([{ text: prompt.trim() }]);
@@ -61,7 +63,7 @@ export async function buildPrivateContext({
 
   const usableOcrResults = ocrResults.filter(
     (item) =>
-      item && typeof item.text === "string" && item.text.trim().length > 0
+      item && typeof item.text === "string" && item.text.trim().length > 0,
   );
 
   if (usableOcrResults.length === 0) {
@@ -152,6 +154,9 @@ export async function buildPrivateContext({
       },
       index: i,
     });
+
+    console.log("Candidate: ", candidateDomEntries);
+    
   }
 
   const domPiiItems = [];

@@ -26,7 +26,6 @@ export default function PromptBox({
         onChange={(event) => onPromptChange(event.target.value)}
         placeholder="Example: Find the application form and help me fill it"
         rows="3"
-        disabled={disabled}
       />
 
       <button

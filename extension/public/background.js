@@ -26,7 +26,7 @@ browserAPI.runtime.onMessage.addListener(async (message) => {
       return {
         success: true,
         screenshot,
-      }
+      };
     } catch (error) {
       console.error("Screen capture failed: ", error);
 

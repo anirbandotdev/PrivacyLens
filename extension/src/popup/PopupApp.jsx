@@ -190,10 +190,6 @@ export default function PopupApp() {
                 type: "CAPTURE_SCREEN",
               });
 
-              if (!response?.success) {
-                throw new Error(response?.error || "Screen capture failed");
-              }
-
               setScreenshot(response.screenshot);
 
               let domContext = [];
@@ -351,7 +347,6 @@ export default function PopupApp() {
           prompt={prompt}
           onPromptChange={setPrompt}
           onSubmit={handlePromptSubmit}
-          disabled={capturing || processing}
         />
         {agentMessage && (
           <div className="popup__agent-message" role="status">
