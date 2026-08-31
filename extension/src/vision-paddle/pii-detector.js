@@ -3,6 +3,34 @@ import { aggregatePIIEntities } from "./aggregateEntities";
 
 const NER_THRESHOLD = 0.9;
 
+const PIN_REGEX = /\b[1-9][0-9]{5}\b/;
+const CONTEXTUAL_NAME_REGEX =
+  /\b(?:hello|welcome|deliver\s+to|ship\s+to)(?:\s*[,:]\s*|\s+)[a-zA-Z]+(?:['’–-][a-zA-Z]+)*(?:\s+[a-zA-Z]+(?:['’–-][a-zA-Z]+)*){0,3}\b/i;
+
+function detectDeterministicPII(text) {
+  if (typeof text !== "string" || !text.trim()) {
+    return [];
+  }
+
+  const entities = [];
+
+  if (PIN_REGEX.test(text)) {
+    entities.push({
+      entity: "PINCODE",
+      score: 1.0,
+    });
+  }
+
+  if (CONTEXTUAL_NAME_REGEX.test(text)) {
+    entities.push({
+      entity: "NAME",
+      score: 1.0,
+    });
+  }
+
+  return entities;
+}
+
 export async function detectPII(items) {
   const model = await getPIIModel();
   const results = [];
@@ -12,7 +40,14 @@ export async function detectPII(items) {
 
     console.log("NER tokens:", tokens);
 
-    const piiEntities = aggregatePIIEntities(tokens, NER_THRESHOLD);
+    let piiEntities = aggregatePIIEntities(tokens, NER_THRESHOLD);
+
+    if (piiEntities.length === 0) {
+      const fallbackEntities = detectDeterministicPII(item.text);
+      if (fallbackEntities.length > 0) {
+        piiEntities = fallbackEntities;
+      }
+    }
 
     if (piiEntities.length === 0) {
       continue;
@@ -30,3 +65,4 @@ export async function detectPII(items) {
 
   return results;
 }
+
