@@ -123,3 +123,63 @@ test("An out-of-range confirmedActionIndexes value is rejected before browser ex
     /Invalid confirmedActionIndexes/i
   );
 });
+
+test("requiresConfirmation: true survives validation across action types", () => {
+  const actions = [
+    { type: "click", targetId: "btn-confirm", requiresConfirmation: true },
+    { type: "type", targetId: "user-name", value: "Alice", requiresConfirmation: true },
+    { type: "scroll", direction: "down", amount: 300, requiresConfirmation: true },
+    { type: "focus", targetId: "input-box", requiresConfirmation: true },
+    { type: "select", targetId: "country-select", value: "US", requiresConfirmation: true }
+  ];
+
+  const validated = validateAgentActions(actions);
+  assert.equal(validated.length, 5);
+  for (const action of validated) {
+    assert.equal(action.requiresConfirmation, true);
+  }
+});
+
+test("requiresConfirmation: false survives validation across action types", () => {
+  const actions = [
+    { type: "click", targetId: "btn-next", requiresConfirmation: false },
+    { type: "type", targetId: "user-name", value: "Bob", requiresConfirmation: false },
+    { type: "scroll", direction: "up", amount: 100, requiresConfirmation: false },
+    { type: "focus", targetId: "input-box", requiresConfirmation: false },
+    { type: "select", targetId: "country-select", value: "CA", requiresConfirmation: false }
+  ];
+
+  const validated = validateAgentActions(actions);
+  assert.equal(validated.length, 5);
+  for (const action of validated) {
+    assert.equal(action.requiresConfirmation, false);
+  }
+});
+
+test("A non-boolean requiresConfirmation value is rejected", () => {
+  const nonBooleans = ["true", "false", 1, 0, null, {}, []];
+
+  for (const val of nonBooleans) {
+    assert.throws(
+      () => validateAgentActions([{ type: "click", targetId: "btn-submit", requiresConfirmation: val }]),
+      /requiresConfirmation must be a boolean/i
+    );
+  }
+});
+
+test("An action without requiresConfirmation property remains valid without adding confirmation", () => {
+  const actions = [
+    { type: "click", targetId: "btn-next" },
+    { type: "type", targetId: "search-field", value: "hello" },
+    { type: "scroll", direction: "down", amount: 200 },
+    { type: "focus", targetId: "search-field" },
+    { type: "select", targetId: "country-select", value: "US" }
+  ];
+
+  const validated = validateAgentActions(actions);
+  assert.equal(validated.length, 5);
+  for (const action of validated) {
+    assert.equal("requiresConfirmation" in action, false);
+    assert.equal(action.requiresConfirmation, undefined);
+  }
+});

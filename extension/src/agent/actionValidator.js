@@ -70,6 +70,14 @@ export function validateAgentActions(actions) {
       throw new Error("Invalid action: unsupported action type.");
     }
 
+    if (action.requiresConfirmation !== undefined && typeof action.requiresConfirmation !== "boolean") {
+      throw new Error("Invalid action: requiresConfirmation must be a boolean.");
+    }
+
+    const confirmation = action.requiresConfirmation !== undefined
+      ? { requiresConfirmation: action.requiresConfirmation }
+      : {};
+
     if (["click", "type", "focus", "select"].includes(type)) {
       validateTargetId(action.targetId);
     }
@@ -78,13 +86,15 @@ export function validateAgentActions(actions) {
       normalizedActions.push({
         type: "click",
         targetId: action.targetId,
-        ...(action.intent ? { intent: action.intent } : {})
+        ...(action.intent ? { intent: action.intent } : {}),
+        ...confirmation
       });
     } else if (type === "focus") {
       normalizedActions.push({
         type: "focus",
         targetId: action.targetId,
-        ...(action.intent ? { intent: action.intent } : {})
+        ...(action.intent ? { intent: action.intent } : {}),
+        ...confirmation
       });
     } else if (type === "select") {
       if (action.valueToken !== undefined) {
@@ -108,6 +118,9 @@ export function validateAgentActions(actions) {
       if (action.intent) {
         normalizedSelect.intent = action.intent;
       }
+      if (action.requiresConfirmation !== undefined) {
+        normalizedSelect.requiresConfirmation = action.requiresConfirmation;
+      }
       normalizedActions.push(normalizedSelect);
     } else if (type === "type") {
       const fieldDescriptor = `${action.targetId || ""} ${action.intent || ""}`;
@@ -130,14 +143,16 @@ export function validateAgentActions(actions) {
           type: "type",
           targetId: action.targetId,
           value: action.value,
-          ...(action.intent ? { intent: action.intent } : {})
+          ...(action.intent ? { intent: action.intent } : {}),
+          ...confirmation
         });
       } else {
         normalizedActions.push({
           type: "type",
           targetId: action.targetId,
           valueToken: action.valueToken,
-          ...(action.intent ? { intent: action.intent } : {})
+          ...(action.intent ? { intent: action.intent } : {}),
+          ...confirmation
         });
       }
     } else if (type === "scroll") {
@@ -167,6 +182,10 @@ export function validateAgentActions(actions) {
 
       if (action.intent) {
         normalizedScroll.intent = action.intent;
+      }
+
+      if (action.requiresConfirmation !== undefined) {
+        normalizedScroll.requiresConfirmation = action.requiresConfirmation;
       }
 
       normalizedActions.push(normalizedScroll);
