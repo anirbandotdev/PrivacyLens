@@ -154,9 +154,6 @@ export async function buildPrivateContext({
       },
       index: i,
     });
-
-    console.log("Candidate: ", candidateDomEntries);
-    
   }
 
   const domPiiItems = [];
@@ -226,6 +223,7 @@ export async function buildPrivateContext({
     decision: "server",
     sanitizedPrompt: prompt.trim(),
     sanitizedText,
+    allowedTargetIds: includedDomEntries.map((entry) => entry.targetId),
     redactionSummary: {
       detectedRegions: piiResults.length,
       redactedRegions: piiResults.length,

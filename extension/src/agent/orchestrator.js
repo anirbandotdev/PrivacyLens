@@ -109,6 +109,18 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
 
     const validatedActions = validateAgentActions(serverResult?.actions ?? []);
 
+    const allowedTargetIds = new Set(
+      Array.isArray(contextResult.allowedTargetIds)
+        ? contextResult.allowedTargetIds
+        : (contextResult.allowedTargetIds || [])
+    );
+
+    for (const action of validatedActions) {
+      if (action.targetId !== undefined && !allowedTargetIds.has(action.targetId)) {
+        throw new Error("Action targetId is not allowed.");
+      }
+    }
+
     return {
       ...serverResult,
       actions: validatedActions,

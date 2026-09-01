@@ -183,3 +183,180 @@ test("An action without requiresConfirmation property remains valid without addi
     assert.equal(action.requiresConfirmation, undefined);
   }
 });
+
+test("An action using a collected ID is accepted", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Clicking submit button",
+        actions: [{ type: "click", targetId: "btn-submit" }]
+      })
+    });
+
+    const buildPrivateContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "click submit",
+      sanitizedText: "Submit button present",
+      allowedTargetIds: ["btn-submit"]
+    });
+
+    const result = await runPrivacyAgent({
+      prompt: "click submit",
+      buildPrivateContext
+    });
+
+    assert.equal(result.source, "server");
+    assert.equal(result.actions.length, 1);
+    assert.equal(result.actions[0].type, "click");
+    assert.equal(result.actions[0].targetId, "btn-submit");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("An action using an unlisted ID is rejected", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Clicking unlisted element",
+        actions: [{ type: "click", targetId: "unlisted-element-id" }]
+      })
+    });
+
+    const buildPrivateContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "click element",
+      sanitizedText: "Some text",
+      allowedTargetIds: ["allowed-btn-1", "allowed-btn-2"]
+    });
+
+    await assert.rejects(
+      async () => {
+        await runPrivacyAgent({
+          prompt: "click element",
+          buildPrivateContext
+        });
+      },
+      (err) => {
+        assert.doesNotMatch(err.message, /unlisted-element-id/);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Untargeted scrolling remains accepted", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Scrolling down",
+        actions: [{ type: "scroll", direction: "down", amount: 500 }]
+      })
+    });
+
+    const buildPrivateContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "scroll the page",
+      sanitizedText: "Page content",
+      allowedTargetIds: []
+    });
+
+    const result = await runPrivacyAgent({
+      prompt: "scroll the page",
+      buildPrivateContext
+    });
+
+    assert.equal(result.source, "server");
+    assert.equal(result.actions.length, 1);
+    assert.equal(result.actions[0].type, "scroll");
+    assert.equal(result.actions[0].direction, "down");
+    assert.equal(result.actions[0].amount, 500);
+    assert.equal(result.actions[0].targetId, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Targeted scrolling using an allowed ID is accepted and unlisted ID is rejected", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Scrolling pane",
+        actions: [{ type: "scroll", direction: "down", amount: 300, targetId: "scrollable-pane" }]
+      })
+    });
+
+    const buildPrivateContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "scroll pane",
+      sanitizedText: "Page content",
+      allowedTargetIds: ["scrollable-pane"]
+    });
+
+    const result = await runPrivacyAgent({
+      prompt: "scroll pane",
+      buildPrivateContext
+    });
+
+    assert.equal(result.source, "server");
+    assert.equal(result.actions.length, 1);
+    assert.equal(result.actions[0].targetId, "scrollable-pane");
+
+    const unlistedContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "scroll pane",
+      sanitizedText: "Page content",
+      allowedTargetIds: ["other-pane"]
+    });
+
+    await assert.rejects(
+      async () => {
+        await runPrivacyAgent({
+          prompt: "scroll pane",
+          buildPrivateContext: unlistedContext
+        });
+      },
+      (err) => {
+        assert.doesNotMatch(err.message, /scrollable-pane/);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Local routing still works without an allowlist", async () => {
+  let contextCalled = false;
+  const buildPrivateContext = async () => {
+    contextCalled = true;
+    return { decision: "server", allowedTargetIds: [] };
+  };
+
+  const result = await runPrivacyAgent({
+    prompt: "Please scroll down",
+    buildPrivateContext
+  });
+
+  assert.equal(contextCalled, false);
+  assert.equal(result.source, "local");
+  assert.equal(result.message, "Scrolling down.");
+  assert.equal(result.actions.length, 1);
+  assert.equal(result.actions[0].direction, "down");
+});
+
