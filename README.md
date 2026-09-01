@@ -238,6 +238,3 @@ The privacy-critical perception pipeline runs on the client. The reasoning model
 5. Disable content-bearing debug logs for production builds.
 6. Measure redaction precision, PII recall, client resource use, and end-to-end latency against the SIH evaluation criteria.
 
-## Licence
-
-No project licence has been specified yet. Add a licence before distributing or accepting external contributions.
