@@ -31,6 +31,10 @@ export async function analyzeSanitizedContext(payload) {
     throw new Error("Raw and unredacted fields are strictly forbidden.");
   }
 
+  if (sanitizedScreenshot !== undefined || "sanitizedScreenshot" in payload) {
+    throw new Error("Screenshot transport is currently disabled.");
+  }
+
   if (privacyVerified !== true) {
     throw new Error("Privacy verification failed. privacyVerified must strictly equal true.");
   }
@@ -39,21 +43,13 @@ export async function analyzeSanitizedContext(payload) {
     throw new Error("A non-empty prompt string is required.");
   }
 
-  const hasText = typeof sanitizedText === "string" && sanitizedText.trim().length > 0;
-  const hasScreenshot = typeof sanitizedScreenshot === "string" && sanitizedScreenshot.trim().length > 0;
-
-  if (!hasText && !hasScreenshot) {
-    throw new Error("At least sanitizedText or sanitizedScreenshot must be provided.");
-  }
-
-  if (sanitizedScreenshot && (typeof sanitizedScreenshot !== "string" || !sanitizedScreenshot.startsWith("data:image/"))) {
-    throw new Error("sanitizedScreenshot must be a valid image data URL starting with data:image/.");
+  if (typeof sanitizedText !== "string" || sanitizedText.trim().length === 0) {
+    throw new Error("A non-empty sanitizedText string is required.");
   }
 
   const requestBody = {
     prompt: prompt.trim(),
-    ...(hasText ? { sanitizedText: sanitizedText.trim() } : {}),
-    ...(hasScreenshot ? { sanitizedScreenshot } : {}),
+    sanitizedText: sanitizedText.trim(),
     redactionSummary: redactionSummary ?? {},
     privacyVerified: true,
   };

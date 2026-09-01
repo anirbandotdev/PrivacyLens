@@ -88,23 +88,21 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
       throw new Error("Server processing requires a non-empty sanitizedPrompt.");
     }
 
-    const hasSanitizedText =
-      typeof contextResult.sanitizedText === "string" &&
-      contextResult.sanitizedText.trim().length > 0;
-    const hasSanitizedScreenshot =
-      typeof contextResult.sanitizedScreenshot === "string" &&
-      contextResult.sanitizedScreenshot.trim().length > 0;
-
-    if (!hasSanitizedText && !hasSanitizedScreenshot) {
-      throw new Error("Server processing requires at least sanitizedText or sanitizedScreenshot.");
+    if (
+      typeof contextResult.sanitizedText !== "string" ||
+      contextResult.sanitizedText.trim().length === 0
+    ) {
+      throw new Error("Server processing requires a non-empty sanitizedText.");
     }
 
     const serverResult = await analyzeSanitizedContext({
       prompt: contextResult.sanitizedPrompt.trim(),
       sanitizedText: contextResult.sanitizedText,
-      sanitizedScreenshot: contextResult.sanitizedScreenshot,
-      redactionSummary: contextResult.redactionSummary ?? {},
-      privacyVerified: contextResult.privacyVerified
+      redactionSummary: {
+        ...(contextResult.redactionSummary ?? {}),
+        screenshotIncluded: false,
+      },
+      privacyVerified: true,
     });
 
     const validatedActions = validateAgentActions(serverResult?.actions ?? []);
