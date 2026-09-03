@@ -1,7 +1,8 @@
-import { getPIIModel } from "./pii-ner";
-import { aggregatePIIEntities } from "./aggregateEntities";
+import { domToScreenshotBox } from "./coordinates";
+import { getPIIModel } from "../vision-paddle/pii-ner";
+import { aggregatePIIEntities } from "../vision-paddle/aggregateEntities";
 
-const NER_THRESHOLD = 0.9;
+const NER_THRESHOLD = 0.7;
 
 const PIN_REGEX = /\b[1-9][0-9]{5}\b/;
 
@@ -62,39 +63,42 @@ function detectDeterministicPII(text) {
   return entities;
 }
 
-export async function detectPII(items) {
+export async function detectPII_DOM(elementArr, viewport, screenshot) {
   const model = await getPIIModel();
   const results = [];
 
-  for (const item of items) {
-    const tokens = await model(item.text);
+  for (const element of elementArr) {
+    const source = element?.source ?? "DOM";
+    const text = typeof element?.text === "string" ? element.text : "";
+    const tokens = await model(text);
 
-    console.log("Item Text: ", item);
-    
-
-    console.log("NER tokens:", tokens);
+    console.log("Element: ", element);
+    // console.log("NER tokens:", tokens);
 
     let piiEntities = aggregatePIIEntities(tokens, NER_THRESHOLD);
 
-    console.log("PII Entities: ", piiEntities);
-    
+    const box = await domToScreenshotBox(element, viewport, screenshot);
 
-    if (piiEntities.length === 0) {
-      const fallbackEntities = detectDeterministicPII(item.text);
+    // let piiEntities = aggregatePIIEntities(tokens, NER_THRESHOLD);
+
+    // console.log("PII Entities: ", piiEntities);
+
+    if (piiEntities.length === 0 && source !== "form") {
+      const fallbackEntities = detectDeterministicPII(element.text);
       if (fallbackEntities.length > 0) {
         piiEntities = fallbackEntities;
       }
     }
 
-    if (piiEntities.length === 0) {
+    if (piiEntities.length === 0 && source !== "form") {
       continue;
     }
 
     results.push({
-      text: item.text,
-      ocrConfidence: item.confidence,
-      box: item.box,
+      text,
+      box,
       pii: piiEntities,
+      source,
     });
   }
 

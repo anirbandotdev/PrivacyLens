@@ -9,8 +9,12 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { blobToDataURL } from "../vision-paddle/blobToDataUrl.js";
 import { buildPrivateContext } from "../vision-paddle/buildPrivateContext.js";
 import { extractText } from "../vision-paddle/paddleocr.js";
-import { detectPII } from "../vision-paddle/pii-detector.js";
+// import { detectPII } from "../vision-paddle/pii-detector.js";
 import { redactImage } from "../vision-paddle/redactImage.js";
+import { domToScreenshotBox } from "../dom/coordinates.js";
+import { base64ToPixels } from "../vision-paddle/base64ToPixels.js";
+import { drawDebugBox } from "../dom/drawDebugBox.js";
+import { detectPII_DOM } from "../dom/dom-pii-detect.js";
 
 // const PRIVACY_LEVELS = [
 //   { key: "low", label: "Low", desc: "Token replacement only" },
@@ -46,24 +50,45 @@ export default function PopupApp() {
       const browserAPI = globalThis.browser || globalThis.chrome;
 
       const response = await browserAPI.runtime.sendMessage({
-        type: "CAPTURE_SCREEN",
+        type: "PROCESS_CURRENT_PAGE",
       });
 
       if (!response?.success) {
-        throw new Error(response?.error || "Screen capture failed");
+        throw new Error(response?.error || "Extracting current screen failed");
       }
       setScreenshot(response.screenshot);
 
       console.log("Screenshot captured successfully");
 
-      console.log(response.screenshot);
-      const extractTextFromImg = await extractText(response.screenshot);
-      const piiResults = await detectPII(extractTextFromImg);
-      const redactedBlob = await redactImage(response.screenshot, piiResults);
-      const redactedDataURL = await blobToDataURL(redactedBlob);
-      setRedactedImage(redactedDataURL);
+      console.log("Screenshot: ", response.screenshot);
+      console.log("Dom: ", response.dom);
+      console.log("Dom-viewport: ", response.dom);
+
+      const pixels = await base64ToPixels(response.screenshot);
+
+      // const boxArr = domToScreenshotBox(response.dom.data.elements, response.dom.data.viewport, pixels);
+
+      const resultArr = await detectPII_DOM(
+        response.dom.data.elements,
+        response.dom.data.viewport,
+        pixels,
+      );
+
+      const debugImage = await drawDebugBox(response.screenshot, resultArr);
+
+      console.log(debugImage);
+      setScreenshot(debugImage);
+
+      setRedactedImage(debugImage);
+
+      // const extractTextFromImg = await extractText(response.screenshot);
+
+      // const piiResults = await detectPII(extractTextFromImg);
+      // const redactedBlob = await redactImage(response.screenshot, piiResults);
+      // const redactedDataURL = await blobToDataURL(redactedBlob);
+      // setRedactedImage(redactedDataURL);
       setProcessing(false);
-      console.log(redactedDataURL);
+      // console.log(redactedDataURL);
     } catch (error) {
       console.error("Screen capture error:", error);
 
@@ -170,7 +195,7 @@ export default function PopupApp() {
       if (!targetPrompt) {
         startAgentFlow();
         return;
-      };
+      }
 
       setAgentActive(true);
       setStatus("observing");

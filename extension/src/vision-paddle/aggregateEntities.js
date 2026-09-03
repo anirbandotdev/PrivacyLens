@@ -1,5 +1,5 @@
 export function aggregatePIIEntities(tokens, threshold) {
-  // console.log("Tokens: ", tokens);
+  console.log("Tokens: ", tokens);
 
   const entities = [];
 
@@ -11,9 +11,9 @@ export function aggregatePIIEntities(tokens, threshold) {
         entities.push(current);
         current = null;
       }
-
       continue;
     }
+    
 
     const entity = token.entity;
 
@@ -51,6 +51,9 @@ export function aggregatePIIEntities(tokens, threshold) {
   if (current) {
     entities.push(current);
   }
+
+  console.log("Entities: ", entities);
+  
 
   return entities;
 }
