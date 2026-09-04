@@ -1,12 +1,20 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { analyzeWithQwen } from "../services/qwen.js";
-import {analyzeWithGemini} from "../services/gemini.js"
+import { analyzeWithGemini } from "../services/gemini.js";
+import { normalizeTaskState } from "../validation/taskState.js";
 
 const router = express.Router();
 
 router.post("/", async (request, response) => {
-  const { prompt, sanitizedText, sanitizedScreenshot, redactionSummary, privacyVerified } = request.body || {};
+  const {
+    prompt,
+    sanitizedText,
+    sanitizedScreenshot,
+    redactionSummary,
+    privacyVerified,
+    taskState,
+  } = request.body || {};
 
   if (privacyVerified !== true) {
     return response.status(400).json({
@@ -60,40 +68,48 @@ router.post("/", async (request, response) => {
     });
   }
 
+  let normalizedTaskState;
+  try {
+    normalizedTaskState = normalizeTaskState(taskState);
+  } catch {
+    return response.status(400).json({
+      success: false,
+      error: "Invalid task state.",
+    });
+  }
+
   const requestId = randomUUID();
-  console.log(`[Request ID] ${requestId}`);
 
   try {
     const analysis = await analyzeWithGemini({
       prompt,
       sanitizedText,
       sanitizedScreenshot,
+      taskState: normalizedTaskState,
     });
 
-    return response.status(200).json({
+    const responsePayload = {
       success: true,
       requestId,
       status: "completed",
       message: analysis.message,
       actions: analysis.actions,
       redactionSummary: redactionSummary || {},
-    });
-  } catch (error) {
-      // Temporary privacy-safe diagnostic log
-      console.error(JSON.stringify({
-        requestId,
-        errorName: error.name,
-        errorMessage: error.message,
-        statusCode: error.status || error.statusCode || "N/A"
-      }));
+    };
 
-      // Generic response to the client
-      response.status(502).json({
-        success: false,
-        requestId,
-        status: "failed",
-        error: "AI analysis failed. Please try again."
-      });
+    if (typeof analysis.taskComplete === "boolean") {
+      responsePayload.taskComplete = analysis.taskComplete;
+    }
+
+    return response.status(200).json(responsePayload);
+  } catch (error) {
+    // Generic response to the client without exposing internal details
+    return response.status(502).json({
+      success: false,
+      requestId,
+      status: "failed",
+      error: "AI analysis failed. Please try again.",
+    });
   }
 });
 
