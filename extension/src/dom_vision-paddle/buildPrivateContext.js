@@ -1,7 +1,6 @@
-import { blobToDataURL } from "./blobToDataUrl.js";
 import { extractText } from "./paddleocr.js";
 import { detectPII } from "./pii-detector.js";
-import { redactImage } from "./redactImage.js";
+import { drawRedactBox } from "./drawRedactBox.js";
 import { extractVisualElementsText } from "./dom-visualElements-extract.js";
 
 const BASE64_IMAGE_DATA_URL_REGEX =
@@ -231,8 +230,7 @@ export async function buildPrivateContext({
 
   let sanitizedScreenshot;
   if (discardedOcrRegions === 0) {
-    const redactedBlob = await redactImage(screenshot, piiResults);
-    sanitizedScreenshot = await blobToDataURL(redactedBlob);
+    sanitizedScreenshot = await drawRedactBox(screenshot, piiResults);
 
     if (
       typeof sanitizedScreenshot !== "string" ||

@@ -6,27 +6,15 @@ import ActionConfirmation from "../components/ActionPerm.jsx";
 import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
 import PromptBox from "../components/PromptBox.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
-import { blobToDataURL } from "../dom_vision-paddle/blobToDataUrl.js";
 import { buildPrivateContext } from "../dom_vision-paddle/buildPrivateContext.js";
-import { extractText } from "../dom_vision-paddle/paddleocr.js";
-// import { detectPII } from "../vision-paddle/pii-detector.js";
-import { redactImage } from "../dom_vision-paddle/redactImage.js";
-import { domToScreenshotBox } from "../dom_vision-paddle/coordinates.js";
 import { base64ToPixels } from "../dom_vision-paddle/base64ToPixels.js";
 import { drawRedactBox } from "../dom_vision-paddle/drawRedactBox.js";
 import { detectPII_DOM } from "../dom_vision-paddle/dom-pii-detect.js";
 import { extractVisualElementsText } from "../dom_vision-paddle/dom-visualElements-extract.js";
 
-// const PRIVACY_LEVELS = [
-//   { key: "low", label: "Low", desc: "Token replacement only" },
-//   { key: "medium", label: "Medium", desc: "Tokens + face blur" },
-//   { key: "high", label: "High", desc: "Full PII redaction" },
-// ];
-
 export default function PopupApp() {
   const [agentActive, setAgentActive] = useState(false);
   const [status, setStatus] = useState("idle");
-  const [privacyLevel, setPrivacyLevel] = useState("medium");
   const [serverStatus] = useState("connected");
   const [latency] = useState(42);
   const [captureError, setCaptureError] = useState(null);
@@ -101,16 +89,6 @@ export default function PopupApp() {
       setCapturing(false);
     }
   }, []);
-
-  const handleToggleAgent = useCallback(async () => {
-    if (agentActive) {
-      setAgentActive(false);
-      setStatus("idle");
-      return;
-    }
-
-    startAgentFlow();
-  }, [agentActive, startAgentFlow]);
 
   const executeActionsSequentially = useCallback(
     async (actions, startIndex = 0) => {
@@ -213,7 +191,7 @@ export default function PopupApp() {
             try {
               const browserAPI = globalThis.browser || globalThis.chrome;
               const response = await browserAPI.runtime.sendMessage({
-                type: "CAPTURE_SCREEN",
+                type: "PROCESS_CURRENT_PAGE",
               });
 
               setScreenshot(response.screenshot);
@@ -235,6 +213,8 @@ export default function PopupApp() {
                 prompt: contextPrompt,
                 screenshot: response.screenshot,
                 domContext,
+                visualElements: response?.dom?.data?.visualElements || [],
+                viewport: response?.dom?.data?.viewport || null,
               });
 
               if (contextResult?.sanitizedScreenshot) {
@@ -287,7 +267,7 @@ export default function PopupApp() {
         setCapturing(false);
       }
     },
-    [prompt, executeActionsSequentially],
+    [prompt, executeActionsSequentially, startAgentFlow],
   );
 
   const openDashboard = useCallback(() => {
