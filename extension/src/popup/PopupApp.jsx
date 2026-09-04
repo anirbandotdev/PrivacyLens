@@ -13,8 +13,9 @@ import { extractText } from "../vision-paddle/paddleocr.js";
 import { redactImage } from "../vision-paddle/redactImage.js";
 import { domToScreenshotBox } from "../dom/coordinates.js";
 import { base64ToPixels } from "../vision-paddle/base64ToPixels.js";
-import { drawDebugBox } from "../dom/drawDebugBox.js";
+import { drawRedactBox } from "../dom/drawRedactBox.js";
 import { detectPII_DOM } from "../dom/dom-pii-detect.js";
+import { extractVisualElementsText } from "../dom/dom-visualElements-extract.js";
 
 // const PRIVACY_LEVELS = [
 //   { key: "low", label: "Low", desc: "Token replacement only" },
@@ -62,11 +63,14 @@ export default function PopupApp() {
 
       console.log("Screenshot: ", response.screenshot);
       console.log("Dom: ", response.dom);
-      console.log("Dom-viewport: ", response.dom);
 
       const pixels = await base64ToPixels(response.screenshot);
 
-      // const boxArr = domToScreenshotBox(response.dom.data.elements, response.dom.data.viewport, pixels);
+      const visualElementsText = await extractVisualElementsText(
+        response.dom.data.visualElements,
+        response.dom.data.viewport,
+        response.screenshot,
+      );
 
       const resultArr = await detectPII_DOM(
         response.dom.data.elements,
@@ -74,21 +78,18 @@ export default function PopupApp() {
         pixels,
       );
 
-      const debugImage = await drawDebugBox(response.screenshot, resultArr);
+      console.log("Final PII results:", resultArr);
+      console.log("Visual element PII results:", visualElementsText);
 
-      console.log(debugImage);
-      setScreenshot(debugImage);
+      const redactedImage = await drawRedactBox(response.screenshot, [
+        ...resultArr,
+        ...visualElementsText,
+      ]);
 
-      setRedactedImage(debugImage);
-
-      // const extractTextFromImg = await extractText(response.screenshot);
-
-      // const piiResults = await detectPII(extractTextFromImg);
-      // const redactedBlob = await redactImage(response.screenshot, piiResults);
-      // const redactedDataURL = await blobToDataURL(redactedBlob);
-      // setRedactedImage(redactedDataURL);
+      console.log(redactedImage);
+      setScreenshot(redactedImage);
+      setRedactedImage(redactedImage);
       setProcessing(false);
-      // console.log(redactedDataURL);
     } catch (error) {
       console.error("Screen capture error:", error);
 

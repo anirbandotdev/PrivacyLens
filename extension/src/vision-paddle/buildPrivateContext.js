@@ -2,6 +2,7 @@ import { blobToDataURL } from "./blobToDataUrl.js";
 import { extractText } from "./paddleocr.js";
 import { detectPII } from "./pii-detector.js";
 import { redactImage } from "./redactImage.js";
+import { extractVisualElementsText } from "../dom/dom-visualElements-extract.js";
 
 const BASE64_IMAGE_DATA_URL_REGEX =
   /^data:image\/[a-zA-Z0-9.+_-]+;base64,[A-Za-z0-9+/=]+$/;
@@ -26,6 +27,8 @@ export async function buildPrivateContext({
   prompt,
   screenshot,
   domContext = [],
+  visualElements = [],
+  viewport = null,
 } = {}) {
   if (typeof prompt !== "string" || prompt.trim().length === 0) {
     throw new Error("A non-empty prompt string is required.");
@@ -75,7 +78,29 @@ export async function buildPrivateContext({
 
   const discardedOcrRegions = ocrResults.length - usableOcrResults.length;
 
-  const piiResults = (await detectPII(usableOcrResults)) || [];
+  // Run OCR on visual elements (images, canvas, svg) that DOM can't extract text from
+  let visualOcrResults = [];
+  if (visualElements.length > 0 && viewport) {
+    try {
+      visualOcrResults = await extractVisualElementsText(
+        visualElements,
+        viewport,
+        screenshot,
+      );
+    } catch (error) {
+      console.warn("Visual element OCR failed:", error.message);
+    }
+  }
+
+  // Merge visual OCR results into the main OCR results for PII scanning
+  const allOcrResults = [
+    ...usableOcrResults,
+    ...visualOcrResults.filter(
+      (item) => item && typeof item.text === "string" && item.text.trim().length > 0,
+    ),
+  ];
+
+  const piiResults = (await detectPII(allOcrResults)) || [];
 
   if (!piiResults.every((item) => isValidPiiBox(item?.box))) {
     return {

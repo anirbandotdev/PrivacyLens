@@ -102,7 +102,5 @@ export async function detectPII_DOM(elementArr, viewport, screenshot) {
     });
   }
 
-  console.log("Final PII results:", results);
-
   return results;
 }

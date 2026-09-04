@@ -1,11 +1,6 @@
 export async function domToScreenshotBox(element, viewport, screenshot) {
   //screenshot -> pixels
 
-
-  console.log("Ss width: ", screenshot.width);
-  console.log("Ss height: ", screenshot.height);
-
-
     let rect = element.rect;
 
     const scaleX = screenshot.width / viewport.width;
