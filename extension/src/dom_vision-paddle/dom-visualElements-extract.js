@@ -1,11 +1,9 @@
 import { domToScreenshotBox } from "./coordinates";
-import { getOCR } from "../vision-paddle/paddleocr";
-import { getPIIModel } from "../vision-paddle/pii-ner";
-import { aggregatePIIEntities } from "../vision-paddle/aggregateEntities";
+import { getOCR } from "./paddleocr";
+import { getPIIModel } from "./pii-ner";
+import { aggregatePIIEntities } from "./aggregateEntities";
 
 const MIN_DIMENSION = 20;
-
-
 
 const NER_THRESHOLD = 0.7;
 
@@ -94,8 +92,6 @@ async function cropImage(bitmap, box) {
   };
 }
 
-
-
 export async function extractVisualElementsText(
   visualElements,
   viewport,
@@ -118,7 +114,11 @@ export async function extractVisualElementsText(
   for (const visualElement of visualElements) {
     if (visualElement.type === "video") continue;
 
-    const box = await domToScreenshotBox(visualElement, viewport, screenshotSize);
+    const box = await domToScreenshotBox(
+      visualElement,
+      viewport,
+      screenshotSize,
+    );
 
     if (box.width < MIN_DIMENSION || box.height < MIN_DIMENSION) continue;
 
@@ -141,7 +141,6 @@ export async function extractVisualElementsText(
     });
 
     console.log("OCR Results: ", ocrResults);
-    
 
     if (!Array.isArray(ocrResults) || ocrResults.length === 0) continue;
 
@@ -150,17 +149,18 @@ export async function extractVisualElementsText(
         continue;
       }
 
-      const points = result.box && Array.isArray(result.box.points)
-        ? result.box.points.map((pt) => ({
-            x: pt.x + cropX,
-            y: pt.y + cropY,
-          }))
-        : [
-            { x: cropX, y: cropY },
-            { x: cropX + cropW, y: cropY },
-            { x: cropX + cropW, y: cropY + cropH },
-            { x: cropX, y: cropY + cropH },
-          ];
+      const points =
+        result.box && Array.isArray(result.box.points)
+          ? result.box.points.map((pt) => ({
+              x: pt.x + cropX,
+              y: pt.y + cropY,
+            }))
+          : [
+              { x: cropX, y: cropY },
+              { x: cropX + cropW, y: cropY },
+              { x: cropX + cropW, y: cropY + cropH },
+              { x: cropX, y: cropY + cropH },
+            ];
 
       const xs = points.map((p) => p.x);
       const ys = points.map((p) => p.y);
@@ -180,7 +180,7 @@ export async function extractVisualElementsText(
       const tokens = await piiModel(result.text);
 
       console.log("Visual OCR token: ", tokens);
-      
+
       let piiEntities = aggregatePIIEntities(tokens, NER_THRESHOLD);
 
       if (piiEntities.length === 0) {
@@ -204,6 +204,6 @@ export async function extractVisualElementsText(
   }
 
   bitmap.close();
-  
+
   return results;
 }

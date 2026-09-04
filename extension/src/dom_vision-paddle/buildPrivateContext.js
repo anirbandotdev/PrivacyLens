@@ -2,7 +2,7 @@ import { blobToDataURL } from "./blobToDataUrl.js";
 import { extractText } from "./paddleocr.js";
 import { detectPII } from "./pii-detector.js";
 import { redactImage } from "./redactImage.js";
-import { extractVisualElementsText } from "../dom/dom-visualElements-extract.js";
+import { extractVisualElementsText } from "./dom-visualElements-extract.js";
 
 const BASE64_IMAGE_DATA_URL_REGEX =
   /^data:image\/[a-zA-Z0-9.+_-]+;base64,[A-Za-z0-9+/=]+$/;
@@ -96,7 +96,8 @@ export async function buildPrivateContext({
   const allOcrResults = [
     ...usableOcrResults,
     ...visualOcrResults.filter(
-      (item) => item && typeof item.text === "string" && item.text.trim().length > 0,
+      (item) =>
+        item && typeof item.text === "string" && item.text.trim().length > 0,
     ),
   ];
 

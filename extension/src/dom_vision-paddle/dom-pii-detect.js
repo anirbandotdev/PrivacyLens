@@ -1,6 +1,6 @@
 import { domToScreenshotBox } from "./coordinates";
-import { getPIIModel } from "../vision-paddle/pii-ner";
-import { aggregatePIIEntities } from "../vision-paddle/aggregateEntities";
+import { getPIIModel } from "./pii-ner";
+import { aggregatePIIEntities } from "./aggregateEntities";
 
 const NER_THRESHOLD = 0.7;
 

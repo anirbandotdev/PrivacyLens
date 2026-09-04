@@ -6,16 +6,16 @@ import ActionConfirmation from "../components/ActionPerm.jsx";
 import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
 import PromptBox from "../components/PromptBox.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
-import { blobToDataURL } from "../vision-paddle/blobToDataUrl.js";
-import { buildPrivateContext } from "../vision-paddle/buildPrivateContext.js";
-import { extractText } from "../vision-paddle/paddleocr.js";
+import { blobToDataURL } from "../dom_vision-paddle/blobToDataUrl.js";
+import { buildPrivateContext } from "../dom_vision-paddle/buildPrivateContext.js";
+import { extractText } from "../dom_vision-paddle/paddleocr.js";
 // import { detectPII } from "../vision-paddle/pii-detector.js";
-import { redactImage } from "../vision-paddle/redactImage.js";
-import { domToScreenshotBox } from "../dom/coordinates.js";
-import { base64ToPixels } from "../vision-paddle/base64ToPixels.js";
-import { drawRedactBox } from "../dom/drawRedactBox.js";
-import { detectPII_DOM } from "../dom/dom-pii-detect.js";
-import { extractVisualElementsText } from "../dom/dom-visualElements-extract.js";
+import { redactImage } from "../dom_vision-paddle/redactImage.js";
+import { domToScreenshotBox } from "../dom_vision-paddle/coordinates.js";
+import { base64ToPixels } from "../dom_vision-paddle/base64ToPixels.js";
+import { drawRedactBox } from "../dom_vision-paddle/drawRedactBox.js";
+import { detectPII_DOM } from "../dom_vision-paddle/dom-pii-detect.js";
+import { extractVisualElementsText } from "../dom_vision-paddle/dom-visualElements-extract.js";
 
 // const PRIVACY_LEVELS = [
 //   { key: "low", label: "Low", desc: "Token replacement only" },
