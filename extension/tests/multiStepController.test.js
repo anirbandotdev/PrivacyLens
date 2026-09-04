@@ -112,15 +112,50 @@ describe('runMultiStepTask', () => {
     assert.equal(result.history[0].status, 'cancelled');
   });
 
-  it('stops on execution failure', async () => {
+  it('stops on execution failure and sets safe message for known status', async () => {
     const result = await runMultiStepTask(baseOpts({
       observeAndPlan: () => makePlan([action('click', 'syn-btn-x')]),
-      executeAction: () => ({ status: 'element_not_found' })
+      executeAction: () => ({ status: 'target_not_found' })
     }));
 
     assert.equal(result.status, 'execution_failed');
+    assert.equal(result.message, 'Action execution failed: target_not_found.');
     assert.equal(result.stepsCompleted, 0);
-    assert.equal(result.history[0].status, 'element_not_found');
+    assert.equal(result.history[0].status, 'target_not_found');
+  });
+
+  it('sets fallback safe message for unknown execution failure status', async () => {
+    const result = await runMultiStepTask(baseOpts({
+      observeAndPlan: () => makePlan([action('click', 'syn-btn-x')]),
+      executeAction: () => ({ status: 'custom_unexpected_error_status' })
+    }));
+
+    assert.equal(result.status, 'execution_failed');
+    assert.equal(result.message, 'Action execution failed: failed.');
+    assert.equal(result.history[0].status, 'custom_unexpected_error_status');
+  });
+
+  it('formats safe controller messages for all allowed fail statuses', async () => {
+    const allowed = [
+      'target_not_found',
+      'target_not_visible',
+      'target_disabled',
+      'unsupported_target',
+      'option_not_found',
+      'blocked_sensitive_field',
+      'requires_local_value',
+      'failed',
+      'invalid'
+    ];
+
+    for (const status of allowed) {
+      const result = await runMultiStepTask(baseOpts({
+        observeAndPlan: () => makePlan([action('click', 'syn-btn-x')]),
+        executeAction: () => ({ status })
+      }));
+      assert.equal(result.status, 'execution_failed');
+      assert.equal(result.message, `Action execution failed: ${status}.`);
+    }
   });
 
   it('enforces step limit', async () => {

@@ -2,6 +2,7 @@ import { analyzeSanitizedContext } from "../api/analyzeClient.js";
 import { validateAgentActions } from "./actionValidator.js";
 import { routeLocalPrompt } from "./localIntentRouter.js";
 import { normalizeTaskState } from "./taskState.js";
+import { isTypedValueAuthorized } from "./textAuthorization.js";
 
 const FORBIDDEN_RAW_KEYS = ["rawScreenshot", "originalScreenshot", "rawText", "originalText"];
 
@@ -42,6 +43,18 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext, taskState }
 
   if (localRouteResult?.decision === "local") {
     const validatedActions = validateAgentActions(localRouteResult.actions ?? []);
+    for (const action of validatedActions) {
+      if (action.type === "type" && typeof action.value === "string") {
+        if (!isTypedValueAuthorized(cleanedPrompt, action.value)) {
+          return {
+            source: "local",
+            message: "The proposed text was not authorized.",
+            actions: [],
+            ...(isMultiStep ? { taskComplete: true } : {}),
+          };
+        }
+      }
+    }
     if (isMultiStep) {
       if (normalizedTaskState.stepIndex === 0) {
         return {
@@ -85,6 +98,19 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext, taskState }
 
   if (decision === "local") {
     const validatedActions = validateAgentActions(contextResult.actions ?? []);
+    const promptToCheck = contextResult.sanitizedPrompt || cleanedPrompt;
+    for (const action of validatedActions) {
+      if (action.type === "type" && typeof action.value === "string") {
+        if (!isTypedValueAuthorized(promptToCheck, action.value)) {
+          return {
+            source: "local",
+            message: "The proposed text was not authorized.",
+            actions: [],
+            ...(isMultiStep ? { taskComplete: true } : {}),
+          };
+        }
+      }
+    }
     if (isMultiStep) {
       if (normalizedTaskState.stepIndex === 0) {
         return {
@@ -161,6 +187,22 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext, taskState }
       }
       if (serverResult.taskComplete === false && validatedActions.length !== 1) {
         throw new Error("Multi-step incomplete task requires exactly one action.");
+      }
+    }
+
+    for (const action of validatedActions) {
+      if (action.type === "type" && typeof action.value === "string") {
+        if (!isTypedValueAuthorized(contextResult.sanitizedPrompt, action.value)) {
+          const result = {
+            source: "server",
+            message: "The proposed text was not authorized.",
+            actions: [],
+          };
+          if (isMultiStep) {
+            result.taskComplete = true;
+          }
+          return result;
+        }
       }
     }
 

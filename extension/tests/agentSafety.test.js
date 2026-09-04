@@ -652,4 +652,138 @@ test("runPrivacyAgent multi-step server response validation (taskComplete boolea
   }
 });
 
+test("runPrivacyAgent allows authorized typed value appearing in sanitizedPrompt", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Typing search term",
+        actions: [{ type: "type", targetId: "input-1", value: "sample item" }]
+      })
+    });
+
+    const buildPrivateContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "search for sample item",
+      sanitizedText: "Page text",
+      allowedTargetIds: ["input-1"]
+    });
+
+    const result = await runPrivacyAgent({
+      prompt: "search for sample item",
+      buildPrivateContext
+    });
+
+    assert.equal(result.source, "server");
+    assert.equal(result.actions.length, 1);
+    assert.equal(result.actions[0].type, "type");
+    assert.equal(result.actions[0].value, "sample item");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("runPrivacyAgent safely terminates with no actions when typed value is unauthorized", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Typing invented search term",
+        actions: [{ type: "type", targetId: "input-1", value: "sample item premium" }]
+      })
+    });
+
+    const buildPrivateContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "search for sample item",
+      sanitizedText: "Page text",
+      allowedTargetIds: ["input-1"]
+    });
+
+    const result = await runPrivacyAgent({
+      prompt: "search for sample item",
+      buildPrivateContext
+    });
+
+    assert.equal(result.source, "server");
+    assert.equal(result.actions.length, 0);
+    assert.match(result.message, /not authorized/i);
+    assert.doesNotMatch(result.message, /premium/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("runPrivacyAgent multi-step safely completes with no actions when typed value is unauthorized", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Typing invented term",
+        taskComplete: false,
+        actions: [{ type: "type", targetId: "input-1", value: "invented addition" }]
+      })
+    });
+
+    const buildPrivateContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "sample query",
+      sanitizedText: "Page text",
+      allowedTargetIds: ["input-1"]
+    });
+
+    const result = await runPrivacyAgent({
+      prompt: "sample query",
+      buildPrivateContext,
+      taskState: { stepIndex: 0, history: [] }
+    });
+
+    assert.equal(result.source, "server");
+    assert.equal(result.taskComplete, true);
+    assert.equal(result.actions.length, 0);
+    assert.match(result.message, /not authorized/i);
+    assert.doesNotMatch(result.message, /invented/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("runPrivacyAgent does not check text authorization on valueToken", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Typing token value",
+        actions: [{ type: "type", targetId: "input-1", valueToken: "LOCAL_STORED_VALUE" }]
+      })
+    });
+
+    const buildPrivateContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "fill in the stored value",
+      sanitizedText: "Page text",
+      allowedTargetIds: ["input-1"]
+    });
+
+    const result = await runPrivacyAgent({
+      prompt: "fill in the stored value",
+      buildPrivateContext
+    });
+
+    assert.equal(result.source, "server");
+    assert.equal(result.actions.length, 1);
+    assert.equal(result.actions[0].valueToken, "LOCAL_STORED_VALUE");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 

@@ -97,7 +97,7 @@ export async function runMultiStepTask({
 
     if (!isObject(execResult) || typeof execResult.status !== 'string' || !execResult.status.trim()) {
       history.push(safeEntry(stepIndex, action.type, 'invalid'));
-      return buildResult('execution_failed', 'Executor returned an invalid result', stepsCompleted, history);
+      return buildResult('execution_failed', safeExecutionFailureMessage('invalid'), stepsCompleted, history);
     }
 
     if (execResult.status === 'requires_confirmation') {
@@ -115,7 +115,7 @@ export async function runMultiStepTask({
 
       if (!isObject(execResult) || typeof execResult.status !== 'string' || !execResult.status.trim()) {
         history.push(safeEntry(stepIndex, action.type, 'invalid'));
-        return buildResult('execution_failed', 'Executor returned an invalid result', stepsCompleted, history);
+        return buildResult('execution_failed', safeExecutionFailureMessage('invalid'), stepsCompleted, history);
       }
     }
 
@@ -137,10 +137,27 @@ export async function runMultiStepTask({
     }
 
     history.push(safeEntry(stepIndex, action.type, execResult.status));
-    return buildResult('execution_failed', 'Action execution failed', stepsCompleted, history);
+    return buildResult('execution_failed', safeExecutionFailureMessage(execResult.status), stepsCompleted, history);
   }
 
   return buildResult('step_limit_reached', 'Maximum step limit reached', stepsCompleted, history);
+}
+
+const ALLOWED_FAIL_STATUSES = new Set([
+  'target_not_found',
+  'target_not_visible',
+  'target_disabled',
+  'unsupported_target',
+  'option_not_found',
+  'blocked_sensitive_field',
+  'requires_local_value',
+  'failed',
+  'invalid'
+]);
+
+function safeExecutionFailureMessage(status) {
+  const safeStatus = ALLOWED_FAIL_STATUSES.has(status) ? status : 'failed';
+  return `Action execution failed: ${safeStatus}.`;
 }
 
 function isObject(v) {
