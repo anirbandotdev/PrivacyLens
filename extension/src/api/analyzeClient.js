@@ -1,3 +1,5 @@
+import { normalizeTaskState } from "../agent/taskState.js";
+
 const ANALYZE_ENDPOINT = "http://localhost:3000/api/analyze";
 const REQUEST_TIMEOUT_MS = 120000;
 
@@ -12,6 +14,7 @@ export async function analyzeSanitizedContext(payload) {
     sanitizedScreenshot,
     redactionSummary,
     privacyVerified,
+    taskState,
     rawScreenshot,
     originalScreenshot,
     rawText,
@@ -47,12 +50,18 @@ export async function analyzeSanitizedContext(payload) {
     throw new Error("A non-empty sanitizedText string is required.");
   }
 
+  const normalizedTaskState = normalizeTaskState(taskState);
+
   const requestBody = {
     prompt: prompt.trim(),
     sanitizedText: sanitizedText.trim(),
     redactionSummary: redactionSummary ?? {},
     privacyVerified: true,
   };
+
+  if (normalizedTaskState !== undefined) {
+    requestBody.taskState = normalizedTaskState;
+  }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);

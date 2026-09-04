@@ -5,6 +5,7 @@ import { validateAgentActions } from "../src/agent/actionValidator.js";
 import { routeLocalPrompt } from "../src/agent/localIntentRouter.js";
 import { runPrivacyAgent } from "../src/agent/orchestrator.js";
 import { executeActionsInActiveTab } from "../src/agent/actionExecutor.js";
+import { analyzeSanitizedContext } from "../src/api/analyzeClient.js";
 
 test("shipping-address typing is accepted", () => {
   const actions = [
@@ -359,4 +360,296 @@ test("Local routing still works without an allowlist", async () => {
   assert.equal(result.actions.length, 1);
   assert.equal(result.actions[0].direction, "down");
 });
+
+test("analyzeSanitizedContext includes taskState in request body when supplied", async () => {
+  const originalFetch = globalThis.fetch;
+  let capturedBody = null;
+  try {
+    globalThis.fetch = async (_url, options) => {
+      capturedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({ message: "ok", actions: [], taskComplete: true })
+      };
+    };
+
+    const taskState = {
+      stepIndex: 1,
+      history: [{ stepIndex: 0, actionType: "click", status: "executed" }]
+    };
+
+    await analyzeSanitizedContext({
+      prompt: "do task",
+      sanitizedText: "page content",
+      privacyVerified: true,
+      taskState
+    });
+
+    assert.ok(capturedBody !== null);
+    assert.deepEqual(capturedBody.taskState, taskState);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("analyzeSanitizedContext omits taskState from request body when absent", async () => {
+  const originalFetch = globalThis.fetch;
+  let capturedBody = null;
+  try {
+    globalThis.fetch = async (_url, options) => {
+      capturedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({ message: "ok", actions: [] })
+      };
+    };
+
+    await analyzeSanitizedContext({
+      prompt: "do task",
+      sanitizedText: "page content",
+      privacyVerified: true
+    });
+
+    assert.ok(capturedBody !== null);
+    assert.equal("taskState" in capturedBody, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("analyzeSanitizedContext rejects malformed taskState", async () => {
+  await assert.rejects(
+    async () => {
+      await analyzeSanitizedContext({
+        prompt: "do task",
+        sanitizedText: "page content",
+        privacyVerified: true,
+        taskState: { stepIndex: -1, history: [] }
+      });
+    },
+    /Invalid task state\./
+  );
+});
+
+test("runPrivacyAgent rejects malformed taskState before routing", async () => {
+  await assert.rejects(
+    async () => {
+      await runPrivacyAgent({
+        prompt: "scroll down",
+        buildPrivateContext: async () => {},
+        taskState: { stepIndex: 1, history: [] }
+      });
+    },
+    /Invalid task state\./
+  );
+});
+
+test("runPrivacyAgent local routing multi-step flow (step 0 vs step 1)", async () => {
+  // Step 0: returns action and taskComplete: false
+  const step0Result = await runPrivacyAgent({
+    prompt: "scroll down",
+    buildPrivateContext: async () => {},
+    taskState: { stepIndex: 0, history: [] }
+  });
+
+  assert.equal(step0Result.source, "local");
+  assert.equal(step0Result.taskComplete, false);
+  assert.equal(step0Result.actions.length, 1);
+  assert.equal(step0Result.actions[0].type, "scroll");
+
+  // Step 1 (after execution): returns 0 actions and taskComplete: true
+  const step1Result = await runPrivacyAgent({
+    prompt: "scroll down",
+    buildPrivateContext: async () => {},
+    taskState: {
+      stepIndex: 1,
+      history: [{ stepIndex: 0, actionType: "scroll", status: "executed" }]
+    }
+  });
+
+  assert.equal(step1Result.source, "local");
+  assert.equal(step1Result.taskComplete, true);
+  assert.equal(step1Result.actions.length, 0);
+});
+
+test("runPrivacyAgent never passes history to buildPrivateContext", async () => {
+  const originalFetch = globalThis.fetch;
+  let receivedContextArgs = null;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Step 1 action",
+        taskComplete: false,
+        actions: [{ type: "click", targetId: "btn-next" }]
+      })
+    });
+
+    const buildPrivateContext = async (args) => {
+      receivedContextArgs = args;
+      return {
+        decision: "server",
+        privacyVerified: true,
+        sanitizedPrompt: "click next",
+        sanitizedText: "Page text",
+        allowedTargetIds: ["btn-next"]
+      };
+    };
+
+    await runPrivacyAgent({
+      prompt: "click next",
+      buildPrivateContext,
+      taskState: {
+        stepIndex: 1,
+        history: [{ stepIndex: 0, actionType: "type", status: "executed" }]
+      }
+    });
+
+    assert.ok(receivedContextArgs !== null);
+    assert.deepEqual(Object.keys(receivedContextArgs), ["prompt"]);
+    assert.equal("history" in receivedContextArgs, false);
+    assert.equal("taskState" in receivedContextArgs, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("runPrivacyAgent multi-step enforces fresh allowlist and rejects previous step allowlist", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    // Step 0: allowed ["btn-step0"]
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Action",
+        taskComplete: false,
+        actions: [{ type: "click", targetId: "btn-step0" }]
+      })
+    });
+
+    const step0Context = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "step 0",
+      sanitizedText: "text",
+      allowedTargetIds: ["btn-step0"]
+    });
+
+    const res0 = await runPrivacyAgent({
+      prompt: "step 0",
+      buildPrivateContext: step0Context,
+      taskState: { stepIndex: 0, history: [] }
+    });
+    assert.equal(res0.actions[0].targetId, "btn-step0");
+
+    // Step 1: new observation only allows ["btn-step1"]. Server tries to use old ID "btn-step0".
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "Action",
+        taskComplete: false,
+        actions: [{ type: "click", targetId: "btn-step0" }]
+      })
+    });
+
+    const step1Context = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "step 1",
+      sanitizedText: "text",
+      allowedTargetIds: ["btn-step1"]
+    });
+
+    await assert.rejects(
+      async () => {
+        await runPrivacyAgent({
+          prompt: "step 1",
+          buildPrivateContext: step1Context,
+          taskState: {
+            stepIndex: 1,
+            history: [{ stepIndex: 0, actionType: "click", status: "executed" }]
+          }
+        });
+      },
+      /Action targetId is not allowed\./
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("runPrivacyAgent multi-step server response validation (taskComplete boolean, actions length consistency)", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const buildContext = async () => ({
+      decision: "server",
+      privacyVerified: true,
+      sanitizedPrompt: "test",
+      sanitizedText: "text",
+      allowedTargetIds: ["btn-1"]
+    });
+
+    // Missing taskComplete
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ message: "ok", actions: [{ type: "click", targetId: "btn-1" }] })
+    });
+
+    await assert.rejects(
+      async () => {
+        await runPrivacyAgent({
+          prompt: "test",
+          buildPrivateContext: buildContext,
+          taskState: { stepIndex: 0, history: [] }
+        });
+      },
+      /Server response missing boolean taskComplete in multi-step mode\./
+    );
+
+    // taskComplete: true with actions > 0
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "done",
+        taskComplete: true,
+        actions: [{ type: "click", targetId: "btn-1" }]
+      })
+    });
+
+    await assert.rejects(
+      async () => {
+        await runPrivacyAgent({
+          prompt: "test",
+          buildPrivateContext: buildContext,
+          taskState: { stepIndex: 0, history: [] }
+        });
+      },
+      /Multi-step task complete requires zero actions\./
+    );
+
+    // taskComplete: false with actions !== 1
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        message: "incomplete",
+        taskComplete: false,
+        actions: []
+      })
+    });
+
+    await assert.rejects(
+      async () => {
+        await runPrivacyAgent({
+          prompt: "test",
+          buildPrivateContext: buildContext,
+          taskState: { stepIndex: 0, history: [] }
+        });
+      },
+      /Multi-step incomplete task requires exactly one action\./
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 

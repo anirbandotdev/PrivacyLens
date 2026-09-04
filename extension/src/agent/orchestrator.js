@@ -1,6 +1,7 @@
 import { analyzeSanitizedContext } from "../api/analyzeClient.js";
 import { validateAgentActions } from "./actionValidator.js";
 import { routeLocalPrompt } from "./localIntentRouter.js";
+import { normalizeTaskState } from "./taskState.js";
 
 const FORBIDDEN_RAW_KEYS = ["rawScreenshot", "originalScreenshot", "rawText", "originalText"];
 
@@ -28,20 +29,39 @@ function hasForbiddenRawData(value, visited = new WeakSet()) {
   return false;
 }
 
-export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
+export async function runPrivacyAgent({ prompt, buildPrivateContext, taskState }) {
   if (typeof prompt !== "string" || prompt.trim().length === 0) {
     throw new Error("A non-empty prompt string is required.");
   }
+
+  const normalizedTaskState = normalizeTaskState(taskState);
+  const isMultiStep = normalizedTaskState !== undefined;
 
   const cleanedPrompt = prompt.trim();
   const localRouteResult = routeLocalPrompt(cleanedPrompt);
 
   if (localRouteResult?.decision === "local") {
     const validatedActions = validateAgentActions(localRouteResult.actions ?? []);
+    if (isMultiStep) {
+      if (normalizedTaskState.stepIndex === 0) {
+        return {
+          source: "local",
+          message: localRouteResult.message,
+          actions: validatedActions,
+          taskComplete: false,
+        };
+      }
+      return {
+        source: "local",
+        message: localRouteResult.message || "Task completed",
+        actions: [],
+        taskComplete: true,
+      };
+    }
     return {
       source: "local",
       message: localRouteResult.message,
-      actions: validatedActions
+      actions: validatedActions,
     };
   }
 
@@ -50,7 +70,7 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
   }
 
   const contextResult = await buildPrivateContext({
-    prompt: cleanedPrompt
+    prompt: cleanedPrompt,
   });
 
   if (!contextResult || typeof contextResult !== "object") {
@@ -65,10 +85,26 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
 
   if (decision === "local") {
     const validatedActions = validateAgentActions(contextResult.actions ?? []);
+    if (isMultiStep) {
+      if (normalizedTaskState.stepIndex === 0) {
+        return {
+          source: "local",
+          message: contextResult.message,
+          actions: validatedActions,
+          taskComplete: false,
+        };
+      }
+      return {
+        source: "local",
+        message: contextResult.message || "Task completed",
+        actions: [],
+        taskComplete: true,
+      };
+    }
     return {
       source: "local",
       message: contextResult.message,
-      actions: validatedActions
+      actions: validatedActions,
     };
   }
 
@@ -95,7 +131,7 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
       throw new Error("Server processing requires a non-empty sanitizedText.");
     }
 
-    const serverResult = await analyzeSanitizedContext({
+    const analyzePayload = {
       prompt: contextResult.sanitizedPrompt.trim(),
       sanitizedText: contextResult.sanitizedText,
       redactionSummary: {
@@ -103,9 +139,30 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
         screenshotIncluded: false,
       },
       privacyVerified: true,
-    });
+    };
+
+    if (isMultiStep) {
+      analyzePayload.taskState = normalizedTaskState;
+    }
+
+    const serverResult = await analyzeSanitizedContext(analyzePayload);
+
+    if (isMultiStep) {
+      if (typeof serverResult?.taskComplete !== "boolean") {
+        throw new Error("Server response missing boolean taskComplete in multi-step mode.");
+      }
+    }
 
     const validatedActions = validateAgentActions(serverResult?.actions ?? []);
+
+    if (isMultiStep) {
+      if (serverResult.taskComplete === true && validatedActions.length !== 0) {
+        throw new Error("Multi-step task complete requires zero actions.");
+      }
+      if (serverResult.taskComplete === false && validatedActions.length !== 1) {
+        throw new Error("Multi-step incomplete task requires exactly one action.");
+      }
+    }
 
     const allowedTargetIds = new Set(
       Array.isArray(contextResult.allowedTargetIds)
@@ -119,11 +176,17 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext }) {
       }
     }
 
-    return {
+    const result = {
       ...serverResult,
       actions: validatedActions,
-      source: "server"
+      source: "server",
     };
+
+    if (isMultiStep) {
+      result.taskComplete = serverResult.taskComplete;
+    }
+
+    return result;
   }
 
   throw new Error(`Unknown decision: ${decision}`);
