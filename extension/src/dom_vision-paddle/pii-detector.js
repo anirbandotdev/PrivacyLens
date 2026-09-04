@@ -1,8 +1,7 @@
-import { domToScreenshotBox } from "./coordinates";
-import { getPIIModel } from "../vision-paddle/pii-ner";
-import { aggregatePIIEntities } from "../vision-paddle/aggregateEntities";
+import { getPIIModel } from "./pii-ner.js";
+import { aggregatePIIEntities } from "./aggregateEntities.js";
 
-const NER_THRESHOLD = 0.7;
+const NER_THRESHOLD = 0.9;
 
 const PIN_REGEX = /\b[1-9][0-9]{5}\b/;
 
@@ -18,7 +17,7 @@ const CONTEXTUAL_OTP_REGEX =
 const CONTEXTUAL_CVV_REGEX =
   /\b(?:(?:cvv|cvc|cid|security[- ]?code)[\s:\-–—]+\d{3,4}|\d{3,4}[\s:\-–—]+(?:cvv|cvc|cid|security[- ]?code))\b/i;
 
-function detectDeterministicPII(text) {
+export function detectDeterministicPII(text) {
   if (typeof text !== "string" || !text.trim()) {
     return [];
   }
@@ -63,46 +62,33 @@ function detectDeterministicPII(text) {
   return entities;
 }
 
-export async function detectPII_DOM(elementArr, viewport, screenshot) {
+export async function detectPII(items) {
   const model = await getPIIModel();
   const results = [];
 
-  for (const element of elementArr) {
-    const source = element?.source ?? "DOM";
-    const text = typeof element?.text === "string" ? element.text : "";
-    const tokens = await model(text);
-
-    console.log("Element: ", element);
-    // console.log("NER tokens:", tokens);
+  for (const item of items) {
+    const tokens = await model(item.text);
 
     let piiEntities = aggregatePIIEntities(tokens, NER_THRESHOLD);
 
-    const box = await domToScreenshotBox(element, viewport, screenshot);
-
-    // let piiEntities = aggregatePIIEntities(tokens, NER_THRESHOLD);
-
-    // console.log("PII Entities: ", piiEntities);
-
-    if (piiEntities.length === 0 && source !== "form") {
-      const fallbackEntities = detectDeterministicPII(element.text);
+    if (piiEntities.length === 0) {
+      const fallbackEntities = detectDeterministicPII(item.text);
       if (fallbackEntities.length > 0) {
         piiEntities = fallbackEntities;
       }
     }
 
-    if (piiEntities.length === 0 && source !== "form") {
+    if (piiEntities.length === 0) {
       continue;
     }
 
     results.push({
-      text,
-      box,
+      text: item.text,
+      ocrConfidence: item.confidence,
+      box: item.box,
       pii: piiEntities,
-      source,
     });
   }
-
-  console.log("Final PII results:", results);
 
   return results;
 }

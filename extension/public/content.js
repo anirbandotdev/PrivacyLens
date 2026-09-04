@@ -127,6 +127,29 @@ function extractFormFields() {
   return results;
 }
 
+function extractVisualElements() {
+  const elements = document.querySelectorAll(
+    "img, canvas, video, svg"
+  );
+
+  return Array.from(elements)
+    .filter(isVisible)
+    .map((element) => {
+      const rect = element.getBoundingClientRect();
+
+      return {
+        type: element.tagName.toLowerCase(),
+
+        rect: {
+          x: rect.left,
+          y: rect.top,
+          width: rect.width,
+          height: rect.height,
+        },
+      };
+    });
+}
+
 function extractDOM() {
   return {
     viewport: {
@@ -138,7 +161,9 @@ function extractDOM() {
     elements: [
       ...extractDOMText(),
       ...extractFormFields()
-    ]
+    ],
+
+    visualElements: extractVisualElements(),
   };
 }
 
