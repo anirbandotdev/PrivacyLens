@@ -1,7 +1,9 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { executeActionsInActiveTab } from "../agent/actionExecutor.js";
 import { collectSafeDomContextInActiveTab } from "../agent/domContextCollector.js";
+import { runMultiStepTask } from "../agent/multiStepController.js";
 import { runPrivacyAgent } from "../agent/orchestrator.js";
+import { waitForActiveTabReady } from "../agent/pageReadiness.js";
 import ActionConfirmation from "../components/ActionPerm.jsx";
 import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
 import PromptBox from "../components/PromptBox.jsx";
@@ -25,7 +27,9 @@ export default function PopupApp() {
   const [prompt, setPrompt] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
   const [agentMessage, setAgentMessage] = useState(null);
-  const [plannedActions, setPlannedActions] = useState([]);
+
+  const isTaskRunningRef = useRef(false);
+  const confirmationResolverRef = useRef(null);
 
   const startAgentFlow = useCallback(async () => {
     setAgentActive(true);
@@ -49,9 +53,6 @@ export default function PopupApp() {
 
       console.log("Screenshot captured successfully");
 
-      console.log("Screenshot: ", response.screenshot);
-      console.log("Dom: ", response.dom);
-
       const pixels = await base64ToPixels(response.screenshot);
 
       const visualElementsText = await extractVisualElementsText(
@@ -66,17 +67,15 @@ export default function PopupApp() {
         pixels,
       );
 
-      console.log("Final PII results:", resultArr);
-      console.log("Visual element PII results:", visualElementsText);
-
       const redactedImage = await drawRedactBox(response.screenshot, [
         ...resultArr,
         ...visualElementsText,
       ]);
 
-      console.log(redactedImage);
       setScreenshot(redactedImage);
       setRedactedImage(redactedImage);
+      setStatus("idle");
+      setAgentActive(false);
       setProcessing(false);
     } catch (error) {
       console.error("Screen capture error:", error);
@@ -90,81 +89,22 @@ export default function PopupApp() {
     }
   }, []);
 
-  const executeActionsSequentially = useCallback(
-    async (actions, startIndex = 0) => {
-      if (!Array.isArray(actions) || actions.length === 0) return;
-
-      for (let i = startIndex; i < actions.length; i++) {
-        const action = actions[i];
-        const executionResults = await executeActionsInActiveTab([action]);
-        const status = executionResults?.[0]?.status;
-
-        if (status === "executed") {
-          continue;
-        }
-
-        if (status === "requires_confirmation") {
-          setPendingAction({
-            action,
-            allActions: actions,
-            actionIndex: i,
-          });
-          return;
-        }
-
-        const safeStatus = status || "failed";
-        setCaptureError(`Action execution status: ${safeStatus}`);
-        setAgentMessage(`Action execution status: ${safeStatus}`);
-        setStatus("error");
-        setAgentActive(false);
-        return;
-      }
-
-      setStatus("idle");
-    },
-    [],
-  );
-
-  const handleApproveAction = useCallback(async () => {
-    if (!pendingAction) return;
-
-    const { action, allActions, actionIndex } = pendingAction;
+  const handleApproveAction = useCallback(() => {
+    const resolver = confirmationResolverRef.current;
+    confirmationResolverRef.current = null;
     setPendingAction(null);
-
-    try {
-      const executionResults = await executeActionsInActiveTab([action], {
-        confirmedActionIndexes: [0],
-      });
-      const status = executionResults?.[0]?.status;
-
-      if (status === "executed") {
-        await executeActionsSequentially(allActions, actionIndex + 1);
-      } else if (status === "requires_confirmation") {
-        setPendingAction({
-          action,
-          allActions,
-          actionIndex,
-        });
-      } else {
-        const safeStatus = status || "failed";
-        setCaptureError(`Action execution status: ${safeStatus}`);
-        setAgentMessage(`Action execution status: ${safeStatus}`);
-        setStatus("error");
-        setAgentActive(false);
-      }
-    } catch (error) {
-      console.error("Action execution error:", error);
-      setCaptureError(error.message);
-      setAgentMessage("Failed to process request. Please try again.");
-      setStatus("error");
-      setAgentActive(false);
+    if (resolver) {
+      resolver(true);
     }
-  }, [pendingAction, executeActionsSequentially]);
+  }, []);
 
   const handleRejectAction = useCallback(() => {
+    const resolver = confirmationResolverRef.current;
+    confirmationResolverRef.current = null;
     setPendingAction(null);
-    setAgentMessage("Action cancelled.");
-    setStatus("idle");
+    if (resolver) {
+      resolver(false);
+    }
   }, []);
 
   const handlePromptSubmit = useCallback(
@@ -176,98 +116,131 @@ export default function PopupApp() {
         return;
       }
 
+      if (isTaskRunningRef.current) {
+        return;
+      }
+      isTaskRunningRef.current = true;
+
       setAgentActive(true);
       setStatus("observing");
       setCaptureError(null);
       setAgentMessage(null);
-      setPlannedActions([]);
+      setRedactedImage(null);
       setProcessing(true);
 
       try {
-        const result = await runPrivacyAgent({
+        const result = await runMultiStepTask({
           prompt: targetPrompt,
-          buildPrivateContext: async ({ prompt: contextPrompt }) => {
-            setCapturing(true);
-            try {
-              const browserAPI = globalThis.browser || globalThis.chrome;
-              const response = await browserAPI.runtime.sendMessage({
-                type: "PROCESS_CURRENT_PAGE",
-              });
+          maxSteps: 6,
+          observeAndPlan: ({ stepIndex, history }) =>
+            runPrivacyAgent({
+              prompt: targetPrompt,
+              taskState: { stepIndex, history },
+              buildPrivateContext: async ({ prompt: contextPrompt }) => {
+                setCapturing(true);
+                try {
+                  const browserAPI = globalThis.browser || globalThis.chrome;
+                  const response = await browserAPI.runtime.sendMessage({
+                    type: "PROCESS_CURRENT_PAGE",
+                  });
 
-              setScreenshot(response.screenshot);
+                  if (!response?.success) {
+                    throw new Error(
+                      response?.error || "Extracting current screen failed",
+                    );
+                  }
 
-              let domContext = [];
-              try {
-                domContext = await collectSafeDomContextInActiveTab();
-              } catch (error) {
-                console.warn(
-                  "DOM context collection failed:",
-                  error instanceof Error
-                    ? error.message
-                    : "Unknown collector error.",
-                );
-                domContext = [];
-              }
+                  setScreenshot(response.screenshot);
 
-              const contextResult = await buildPrivateContext({
-                prompt: contextPrompt,
-                screenshot: response.screenshot,
-                domContext,
-                visualElements: response?.dom?.data?.visualElements || [],
-                viewport: response?.dom?.data?.viewport || null,
-              });
+                  let domContext = [];
+                  try {
+                    domContext = await collectSafeDomContextInActiveTab();
+                  } catch (error) {
+                    console.warn(
+                      "DOM context collection failed:",
+                      error instanceof Error
+                        ? error.message
+                        : "Unknown collector error.",
+                    );
+                    domContext = [];
+                  }
 
-              if (contextResult?.sanitizedScreenshot) {
-                setRedactedImage(contextResult.sanitizedScreenshot);
-              }
+                  const contextResult = await buildPrivateContext({
+                    prompt: contextPrompt,
+                    screenshot: response.screenshot,
+                    domContext,
+                    visualElements: response?.dom?.data?.visualElements || [],
+                    viewport: response?.dom?.data?.viewport || null,
+                  });
 
-              return contextResult;
-            } finally {
-              setCapturing(false);
-            }
+                  if (contextResult?.sanitizedScreenshot) {
+                    setRedactedImage(contextResult.sanitizedScreenshot);
+                  }
+
+                  return contextResult;
+                } finally {
+                  setCapturing(false);
+                }
+              },
+            }),
+          executeAction: async (action, { confirmed } = {}) => {
+            const options = confirmed
+              ? { confirmedActionIndexes: [0] }
+              : undefined;
+            const results = await executeActionsInActiveTab([action], options);
+            return results?.[0] || { status: "failed" };
           },
+          requestConfirmation: (action) => {
+            return new Promise((resolve) => {
+              confirmationResolverRef.current = resolve;
+              setPendingAction({ action });
+            });
+          },
+          waitForReady: ({ actionType, signal }) =>
+            waitForActiveTabReady({
+              settleDelayMs:
+                actionType === "search" || actionType === "submit_search" || actionType === "click"
+                  ? 2000
+                  : 500,
+              signal,
+            }),
         });
 
         if (result?.message) {
           setAgentMessage(result.message);
         }
-        if (result?.actions) {
-          setPlannedActions(result.actions);
-        }
 
-        if (result?.source === "local") {
-          const executionResults = await executeActionsInActiveTab(
-            result.actions || [],
-          );
-          for (const execResult of executionResults || []) {
-            if (execResult?.status !== "executed") {
-              throw new Error(
-                `Action execution status: ${execResult?.status || "failed"}`,
-              );
-            }
-          }
+        const NON_ERROR_STATUSES = new Set([
+          "completed",
+          "cancelled",
+          "aborted",
+        ]);
+
+        if (NON_ERROR_STATUSES.has(result?.status)) {
           setStatus("idle");
-        } else if (result?.source === "server") {
-          if (Array.isArray(result.actions) && result.actions.length > 0) {
-            await executeActionsSequentially(result.actions, 0);
-          } else {
-            setStatus("idle");
-          }
         } else {
-          setStatus("idle");
+          setStatus("error");
+          setCaptureError(
+            result?.message || `Task failed with status: ${result?.status}`,
+          );
         }
       } catch (error) {
         console.error("Agent execution error:", error);
         setCaptureError(error.message);
         setAgentMessage("Failed to process request. Please try again.");
         setStatus("error");
-        setAgentActive(false);
       } finally {
         setProcessing(false);
         setCapturing(false);
+        setAgentActive(false);
+        isTaskRunningRef.current = false;
+        if (confirmationResolverRef.current) {
+          confirmationResolverRef.current(false);
+          confirmationResolverRef.current = null;
+        }
       }
     },
-    [prompt, executeActionsSequentially, startAgentFlow],
+    [prompt, startAgentFlow],
   );
 
   const openDashboard = useCallback(() => {
@@ -353,6 +326,7 @@ export default function PopupApp() {
           prompt={prompt}
           onPromptChange={setPrompt}
           onSubmit={handlePromptSubmit}
+          disabled={processing || capturing}
         />
         {agentMessage && (
           <div className="popup__agent-message" role="status">

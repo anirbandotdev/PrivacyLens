@@ -137,13 +137,14 @@ function extractInteractiveDomContext() {
     'button, a[href], input, textarea, select, [role="button"], [role="link"]'
   );
 
-  const results = [];
-  let generatedIdCounter = 1;
+  const candidates = [];
+  const viewportHeight =
+    window.innerHeight || document.documentElement.clientHeight || 0;
+  const viewportWidth =
+    window.innerWidth || document.documentElement.clientWidth || 0;
 
-  for (const el of elements) {
-    if (results.length >= 100) {
-      break;
-    }
+  for (let i = 0; i < elements.length && i < 1500; i++) {
+    const el = elements[i];
 
     if (!isElementVisible(el) || isElementDisabled(el)) {
       continue;
@@ -170,7 +171,62 @@ function extractInteractiveDomContext() {
           continue;
         }
       }
-    } else {
+    }
+
+    const rect = el.getBoundingClientRect();
+    const inViewport =
+      rect.bottom > 0 &&
+      rect.right > 0 &&
+      rect.top < viewportHeight &&
+      rect.left < viewportWidth;
+
+    let label = getElementLabel(el);
+    if (label) {
+      const container = el.parentElement
+        ? el.parentElement.closest(
+            '[role="row"], [role="listitem"], [role="option"], li, article'
+          )
+        : null;
+      if (container) {
+        const containerText = (container.innerText || container.textContent || "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (containerText && !label.includes(containerText)) {
+          label = cleanLabel(`${label} — ${containerText}`);
+        }
+      }
+    }
+    const hasLabel = Boolean(label);
+
+    candidates.push({
+      el,
+      targetId,
+      inViewport,
+      hasLabel,
+      label,
+      index: i,
+    });
+  }
+
+  candidates.sort((a, b) => {
+    if (a.inViewport !== b.inViewport) {
+      return a.inViewport ? -1 : 1;
+    }
+    if (a.hasLabel !== b.hasLabel) {
+      return a.hasLabel ? -1 : 1;
+    }
+    return a.index - b.index;
+  });
+
+  const selected = candidates.slice(0, 100);
+  const results = [];
+  let generatedIdCounter = 1;
+
+  for (const item of selected) {
+    const el = item.el;
+    let targetId = item.targetId;
+
+    if (!targetId) {
       while (
         document.getElementById(`privacylens-target-${generatedIdCounter}`)
       ) {
@@ -187,14 +243,13 @@ function extractInteractiveDomContext() {
         ? (el.getAttribute("type") || el.type || "text").toLowerCase()
         : null;
     const role = el.getAttribute("role") || null;
-    const label = getElementLabel(el);
 
     results.push({
       targetId,
       elementType,
       controlType,
       role,
-      label,
+      label: item.label,
     });
   }
 

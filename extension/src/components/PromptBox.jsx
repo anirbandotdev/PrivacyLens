@@ -4,14 +4,20 @@ export default function PromptBox({
   prompt,
   onPromptChange,
   onSubmit,
+  disabled = false,
 }) {
   function handleSubmit(event) {
     event.preventDefault();
 
     const cleanedPrompt = prompt.trim();
+    if (!cleanedPrompt || disabled) {
+      return;
+    }
 
     onSubmit(cleanedPrompt);
   }
+
+  const isSubmitDisabled = disabled || !prompt.trim();
 
   return (
     <form className="prompt-box" onSubmit={handleSubmit}>
@@ -26,11 +32,13 @@ export default function PromptBox({
         onChange={(event) => onPromptChange(event.target.value)}
         placeholder="Example: Find the application form and help me fill it"
         rows="3"
+        disabled={disabled}
       />
 
       <button
         className="prompt-box__submit"
         type="submit"
+        disabled={isSubmitDisabled}
       >
         Start Task
       </button>

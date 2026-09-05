@@ -22,13 +22,14 @@ describe("extension normalizeTaskState", () => {
 
   it("normalizes valid multi-step taskState with all allowed action types", () => {
     const validState = {
-      stepIndex: 5,
+      stepIndex: 6,
       history: [
         { stepIndex: 0, actionType: "click", status: "executed" },
         { stepIndex: 1, actionType: "type", status: "executed" },
         { stepIndex: 2, actionType: "scroll", status: "executed" },
         { stepIndex: 3, actionType: "focus", status: "executed" },
         { stepIndex: 4, actionType: "select", status: "executed" },
+        { stepIndex: 5, actionType: "submit_search", status: "executed" },
       ],
     };
     const result = normalizeTaskState(validState);

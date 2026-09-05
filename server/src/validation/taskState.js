@@ -1,4 +1,4 @@
-const ALLOWED_ACTION_TYPES = new Set(["click", "type", "scroll", "focus", "select"]);
+const ALLOWED_ACTION_TYPES = new Set(["click", "type", "scroll", "focus", "select", "submit_search", "search"]);
 const ALLOWED_ROOT_KEYS = new Set(["stepIndex", "history"]);
 const ALLOWED_HISTORY_KEYS = new Set(["stepIndex", "actionType", "status"]);
 

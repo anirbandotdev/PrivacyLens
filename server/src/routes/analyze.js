@@ -127,6 +127,22 @@ router.post("/", async (request, response) => {
       taskState: normalizedTaskState,
     });
 
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        JSON.stringify({
+          requestId,
+          stepIndex: normalizedTaskState?.stepIndex ?? null,
+          taskComplete: analysis.taskComplete ?? null,
+          actions: Array.isArray(analysis.actions)
+            ? analysis.actions.map((action) => ({
+                type: action?.type ?? null,
+                targetId: action?.targetId ?? null,
+              }))
+            : [],
+        }),
+      );
+    }
+
     const responsePayload = {
       success: true,
       requestId,

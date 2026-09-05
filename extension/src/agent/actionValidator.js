@@ -3,7 +3,9 @@ const ALLOWED_ACTION_TYPES = new Set([
   "type",
   "scroll",
   "focus",
-  "select"
+  "select",
+  "submit_search",
+  "search"
 ]);
 
 const ALLOWED_SCROLL_DIRECTIONS = new Set([
@@ -78,7 +80,7 @@ export function validateAgentActions(actions) {
       ? { requiresConfirmation: action.requiresConfirmation }
       : {};
 
-    if (["click", "type", "focus", "select"].includes(type)) {
+    if (["click", "type", "focus", "select", "submit_search", "search"].includes(type)) {
       validateTargetId(action.targetId);
     }
 
@@ -189,6 +191,51 @@ export function validateAgentActions(actions) {
       }
 
       normalizedActions.push(normalizedScroll);
+    } else if (type === "submit_search") {
+      if (
+        action.value !== undefined ||
+        action.valueToken !== undefined ||
+        action.direction !== undefined ||
+        action.amount !== undefined
+      ) {
+        throw new Error("Invalid action: submit_search does not accept value, valueToken, direction, or amount.");
+      }
+
+      normalizedActions.push({
+        type: "submit_search",
+        targetId: action.targetId,
+        ...(action.intent ? { intent: action.intent } : {}),
+        ...confirmation
+      });
+    } else if (type === "search") {
+      const fieldDescriptor = `${action.targetId || ""} ${action.intent || ""}`;
+      if (isSensitiveFieldDescriptor(fieldDescriptor)) {
+        throw new Error("Invalid action: searching in sensitive fields is not permitted.");
+      }
+
+      if (
+        action.valueToken !== undefined ||
+        action.direction !== undefined ||
+        action.amount !== undefined
+      ) {
+        throw new Error("Invalid action: search action does not permit valueToken, direction, or amount.");
+      }
+
+      if (typeof action.value !== "string" || action.value.length === 0) {
+        throw new Error("Invalid action: search action requires a non-empty value string.");
+      }
+
+      if (SENSITIVE_VALUE_REGEX.test(action.value)) {
+        throw new Error("Invalid action: sensitive values must require local user entry.");
+      }
+
+      normalizedActions.push({
+        type: "search",
+        targetId: action.targetId,
+        value: action.value,
+        ...(action.intent ? { intent: action.intent } : {}),
+        ...confirmation
+      });
     }
   }
 

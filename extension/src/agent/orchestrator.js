@@ -44,7 +44,7 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext, taskState }
   if (localRouteResult?.decision === "local") {
     const validatedActions = validateAgentActions(localRouteResult.actions ?? []);
     for (const action of validatedActions) {
-      if (action.type === "type" && typeof action.value === "string") {
+      if ((action.type === "type" || action.type === "search") && typeof action.value === "string") {
         if (!isTypedValueAuthorized(cleanedPrompt, action.value)) {
           return {
             source: "local",
@@ -100,7 +100,7 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext, taskState }
     const validatedActions = validateAgentActions(contextResult.actions ?? []);
     const promptToCheck = contextResult.sanitizedPrompt || cleanedPrompt;
     for (const action of validatedActions) {
-      if (action.type === "type" && typeof action.value === "string") {
+      if ((action.type === "type" || action.type === "search") && typeof action.value === "string") {
         if (!isTypedValueAuthorized(promptToCheck, action.value)) {
           return {
             source: "local",
@@ -191,7 +191,7 @@ export async function runPrivacyAgent({ prompt, buildPrivateContext, taskState }
     }
 
     for (const action of validatedActions) {
-      if (action.type === "type" && typeof action.value === "string") {
+      if ((action.type === "type" || action.type === "search") && typeof action.value === "string") {
         if (!isTypedValueAuthorized(contextResult.sanitizedPrompt, action.value)) {
           const result = {
             source: "server",

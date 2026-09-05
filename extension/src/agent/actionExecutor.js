@@ -272,6 +272,7 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
 
       targetEl.focus();
 
+      const previousValue = targetEl.value || "";
       const proto =
         targetEl instanceof HTMLInputElement
           ? window.HTMLInputElement?.prototype
@@ -284,8 +285,157 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
         targetEl.value = action.value;
       }
 
-      targetEl.dispatchEvent(new Event("input", { bubbles: true }));
+      // Reset any framework value tracker so the dispatched event
+      // is recognized as an actual value change.
+      if (targetEl._valueTracker && typeof targetEl._valueTracker.setValue === "function") {
+        targetEl._valueTracker.setValue(previousValue);
+      }
+
+      targetEl.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
       targetEl.dispatchEvent(new Event("change", { bubbles: true }));
+
+      results.push({
+        actionIndex: i,
+        type: action.type,
+        status: "executed"
+      });
+    } else if (action.type === "submit_search") {
+      if (!(targetEl instanceof HTMLInputElement)) {
+        results.push({
+          actionIndex: i,
+          type: action.type,
+          status: "unsupported_target"
+        });
+        continue;
+      }
+
+      const inputType = (targetEl.getAttribute("type") || targetEl.type || "").toLowerCase();
+      const role = (targetEl.getAttribute("role") || "").toLowerCase();
+      
+      const isSearchType = inputType === "search" || role === "searchbox";
+      const isInsideSearchLandmark = !!targetEl.closest('search, [role="search"], form[role="search"]');
+
+      if (!isSearchType && !isInsideSearchLandmark) {
+        results.push({
+          actionIndex: i,
+          type: action.type,
+          status: "unsupported_target"
+        });
+        continue;
+      }
+
+      if (isSensitiveField(targetEl)) {
+        results.push({
+          actionIndex: i,
+          type: action.type,
+          status: "blocked_sensitive_field"
+        });
+        continue;
+      }
+
+      targetEl.focus();
+
+      const eventInit = {
+        key: "Enter",
+        code: "Enter",
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+      };
+
+      targetEl.dispatchEvent(new KeyboardEvent("keydown", eventInit));
+      targetEl.dispatchEvent(new KeyboardEvent("keypress", eventInit));
+      targetEl.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+
+      results.push({
+        actionIndex: i,
+        type: action.type,
+        status: "executed"
+      });
+    } else if (action.type === "search") {
+      if (!(targetEl instanceof HTMLInputElement)) {
+        results.push({
+          actionIndex: i,
+          type: action.type,
+          status: "unsupported_target"
+        });
+        continue;
+      }
+
+      const inputType = (targetEl.getAttribute("type") || targetEl.type || "").toLowerCase();
+      const role = (targetEl.getAttribute("role") || "").toLowerCase();
+
+      const isSearchType = inputType === "search" || role === "searchbox";
+      const isInsideSearchLandmark = !!targetEl.closest('search, [role="search"], form[role="search"]');
+
+      if (!isSearchType && !isInsideSearchLandmark) {
+        results.push({
+          actionIndex: i,
+          type: action.type,
+          status: "unsupported_target"
+        });
+        continue;
+      }
+
+      if (isSensitiveField(targetEl)) {
+        results.push({
+          actionIndex: i,
+          type: action.type,
+          status: "blocked_sensitive_field"
+        });
+        continue;
+      }
+
+      targetEl.focus();
+
+      const previousValue = targetEl.value || "";
+      const proto = window.HTMLInputElement?.prototype;
+      const nativeSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+
+      if (nativeSetter) {
+        nativeSetter.call(targetEl, action.value);
+      } else {
+        targetEl.value = action.value;
+      }
+
+      if (targetEl._valueTracker && typeof targetEl._valueTracker.setValue === "function") {
+        targetEl._valueTracker.setValue(previousValue);
+      }
+
+      targetEl.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+      targetEl.dispatchEvent(new Event("change", { bubbles: true }));
+
+      const searchForm =
+        targetEl.closest('form[role="search"]') ||
+        targetEl.closest('search form') ||
+        (targetEl.form && (targetEl.form.getAttribute("role") === "search" || !!targetEl.form.closest('search, [role="search"]'))) ||
+        null;
+
+      let submitted = false;
+      if (searchForm && typeof searchForm.requestSubmit === "function") {
+        try {
+          searchForm.requestSubmit();
+          submitted = true;
+        } catch {
+          submitted = false;
+        }
+      }
+
+      if (!submitted) {
+        const eventInit = {
+          key: "Enter",
+          code: "Enter",
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          cancelable: true
+        };
+
+        targetEl.dispatchEvent(new KeyboardEvent("keydown", eventInit));
+        targetEl.dispatchEvent(new KeyboardEvent("keypress", eventInit));
+        targetEl.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+      }
 
       results.push({
         actionIndex: i,

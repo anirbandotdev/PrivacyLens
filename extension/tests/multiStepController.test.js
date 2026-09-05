@@ -180,6 +180,7 @@ describe('runMultiStepTask', () => {
     assert.equal(result.stepsCompleted, 2);
   });
 
+
   it('respects an already-aborted signal', async () => {
     const ac = new AbortController();
     ac.abort();
