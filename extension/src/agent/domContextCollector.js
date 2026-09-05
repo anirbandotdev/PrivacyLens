@@ -1,6 +1,26 @@
-function extractInteractiveDomContext() {
+function extractInteractiveDomContext(options = {}) {
+  const isStructuralOnly = options?.structuralOnly === true;
+
   const SENSITIVE_FIELD_REGEX =
     /\b(?:password\d*|passwd\d*|passcode\d*|pwd\d*|otp\d*|pin\d*|cvv\d*|cvc\d*|cid\d*|one\s+time\s+(?:code|password)|security\s+code|card\s+number|credit\s+card|debit\s+card|cc\s+number|cc\s+csc|cc\s+cvc|cc\s+cvv)\b/i;
+
+  const BOUNDED_PURPOSE_MAP = [
+    { purpose: "send", regex: /^(?:send(?:\s+message)?)$/i },
+    { purpose: "post", regex: /^(?:post(?:\s+update)?)$/i },
+    { purpose: "publish", regex: /^(?:publish(?:\s+article)?)$/i },
+    { purpose: "reply", regex: /^(?:reply)$/i },
+    { purpose: "search", regex: /^(?:search)$/i },
+    { purpose: "close", regex: /^(?:close|cancel)$/i },
+  ];
+
+  function getBoundedPurpose(raw) {
+    if (typeof raw !== "string") return null;
+    const clean = raw.trim();
+    for (const { purpose, regex } of BOUNDED_PURPOSE_MAP) {
+      if (regex.test(clean)) return purpose;
+    }
+    return null;
+  }
 
   function normalizeDescriptor(str) {
     if (typeof str !== "string") return "";
@@ -38,13 +58,17 @@ function extractInteractiveDomContext() {
   function isSensitiveField(el) {
     if (!el) return false;
     const tag = el.tagName.toLowerCase();
-    if (tag === "input" || tag === "textarea") {
+    const isEditable =
+      el.getAttribute?.("contenteditable") === "true" ||
+      el.isContentEditable === true;
+    if (tag === "input" || tag === "textarea" || isEditable) {
       const typeAttr = el.getAttribute("type") || el.type || "";
       if (typeAttr.toLowerCase() === "password") return true;
       const autocompleteAttr = el.getAttribute("autocomplete") || "";
       const nameAttr = el.getAttribute("name") || "";
       const idAttr = el.getAttribute("id") || el.id || "";
-      const combined = `${typeAttr} ${autocompleteAttr} ${nameAttr} ${idAttr}`;
+      const ariaLabel = el.getAttribute("aria-label") || "";
+      const combined = `${typeAttr} ${autocompleteAttr} ${nameAttr} ${idAttr} ${ariaLabel}`;
       return SENSITIVE_FIELD_REGEX.test(normalizeDescriptor(combined));
     }
     return false;
@@ -56,6 +80,29 @@ function extractInteractiveDomContext() {
   }
 
   function getElementLabel(el) {
+    const isEditable =
+      (el.getAttribute?.("contenteditable") === "true" ||
+        el.getAttribute?.("contenteditable") === "" ||
+        el.getAttribute?.("contenteditable") === "plaintext-only" ||
+        el.contentEditable === "true" ||
+        el.isContentEditable === true) &&
+      (el.getAttribute?.("role") || "").toLowerCase() === "textbox";
+    if (isEditable) {
+      return "Editable message textbox";
+    }
+
+    if (isStructuralOnly) {
+      const ariaLabel = el.getAttribute("aria-label") || "";
+      const text = el.innerText || el.textContent || "";
+      const title = el.getAttribute("title") || el.title || "";
+      const val = el.getAttribute("value") || el.value || "";
+      const matched = getBoundedPurpose(ariaLabel) || getBoundedPurpose(text) || getBoundedPurpose(title) || getBoundedPurpose(val);
+      if (matched) {
+        return matched.charAt(0).toUpperCase() + matched.slice(1);
+      }
+      return "";
+    }
+
     const ariaLabel = el.getAttribute("aria-label");
     if (ariaLabel && ariaLabel.trim()) {
       return cleanLabel(ariaLabel);
@@ -82,7 +129,7 @@ function extractInteractiveDomContext() {
       } catch {}
     }
 
-    const parentLabel = el.closest("label");
+    const parentLabel = el.closest?.("label");
     if (parentLabel) {
       const labelText = parentLabel.innerText || parentLabel.textContent;
       if (labelText && labelText.trim()) {
@@ -134,7 +181,7 @@ function extractInteractiveDomContext() {
   }
 
   const elements = document.querySelectorAll(
-    'button, a[href], input, textarea, select, [role="button"], [role="link"]'
+    'button, a[href], input, textarea, select, [role="button"], [role="link"], [contenteditable="true"][role="textbox"], [contenteditable][role="textbox"]'
   );
 
   const candidates = [];
@@ -181,7 +228,7 @@ function extractInteractiveDomContext() {
       rect.left < viewportWidth;
 
     let label = getElementLabel(el);
-    if (label) {
+    if (label && !isStructuralOnly) {
       const container = el.parentElement
         ? el.parentElement.closest(
             '[role="row"], [role="listitem"], [role="option"], li, article'
@@ -237,26 +284,51 @@ function extractInteractiveDomContext() {
       generatedIdCounter++;
     }
 
+    const isContentEditable =
+      (el.getAttribute?.("contenteditable") === "true" ||
+        el.getAttribute?.("contenteditable") === "" ||
+        el.getAttribute?.("contenteditable") === "plaintext-only" ||
+        el.contentEditable === "true" ||
+        el.isContentEditable === true) &&
+      (el.getAttribute?.("role") || "").toLowerCase() === "textbox";
     const elementType = el.tagName.toLowerCase();
     const controlType =
-      elementType === "input"
+      isContentEditable
+        ? "contenteditable"
+        : elementType === "input"
         ? (el.getAttribute("type") || el.type || "text").toLowerCase()
         : null;
     const role = el.getAttribute("role") || null;
+    const label = isContentEditable ? "Editable message textbox" : item.label;
 
-    results.push({
+    const resultItem = {
       targetId,
       elementType,
       controlType,
       role,
-      label: item.label,
-    });
+      label,
+    };
+
+    if (isContentEditable || controlType === "contenteditable") {
+      resultItem.hasContent = Boolean(
+        (el.innerText || el.textContent || "").trim()
+      );
+    }
+
+    if (isStructuralOnly) {
+      const purpose = getBoundedPurpose(label);
+      if (purpose) {
+        resultItem.purpose = purpose;
+      }
+    }
+
+    results.push(resultItem);
   }
 
   return results;
 }
 
-export async function collectSafeDomContextInActiveTab() {
+export async function collectSafeDomContextInActiveTab(options = {}) {
   const browserApi = globalThis.browser ?? globalThis.chrome;
   if (!browserApi?.tabs?.query || !browserApi?.scripting?.executeScript) {
     throw new Error("Browser scripting APIs unavailable.");
@@ -274,12 +346,15 @@ export async function collectSafeDomContextInActiveTab() {
   const executionResults = await browserApi.scripting.executeScript({
     target: { tabId: activeTab.id },
     func: extractInteractiveDomContext,
+    args: [options],
   });
 
   const rawResults = executionResults?.[0]?.result;
   if (!Array.isArray(rawResults)) {
     throw new Error("Failed to collect DOM context.");
   }
+
+  const ALLOWED_PURPOSES = new Set(["send", "post", "publish", "reply", "search", "close"]);
 
   const normalizedResults = [];
   for (const item of rawResults) {
@@ -309,13 +384,23 @@ export async function collectSafeDomContextInActiveTab() {
         ? item.label.replace(/\s+/g, " ").trim().slice(0, 120)
         : "";
 
-    normalizedResults.push({
+    const normalizedItem = {
       targetId,
       elementType,
       controlType,
       role,
       label,
-    });
+    };
+
+    if (normalizedItem.controlType === "contenteditable" || typeof item.hasContent === "boolean") {
+      normalizedItem.hasContent = Boolean(item.hasContent);
+    }
+
+    if (typeof item.purpose === "string" && ALLOWED_PURPOSES.has(item.purpose)) {
+      normalizedItem.purpose = item.purpose;
+    }
+
+    normalizedResults.push(normalizedItem);
   }
 
   return normalizedResults;

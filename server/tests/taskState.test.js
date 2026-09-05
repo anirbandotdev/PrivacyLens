@@ -228,6 +228,39 @@ describe("normalizeTaskState", () => {
     );
   });
 
+  it("normalizes valid taskState with allowlisted effects", () => {
+    const validStateWithEffects = {
+      stepIndex: 4,
+      history: [
+        { stepIndex: 0, actionType: "search", status: "executed", effect: "search_submitted" },
+        { stepIndex: 1, actionType: "type", status: "executed", effect: "message_composed" },
+        { stepIndex: 2, actionType: "click", status: "executed", effect: "media_started" },
+        { stepIndex: 3, actionType: "click", status: "executed", effect: "message_sent" },
+      ],
+    };
+    const result = normalizeTaskState(validStateWithEffects);
+    assert.deepEqual(result, validStateWithEffects);
+  });
+
+  it("rejects non-allowlisted effects or non-string effects", () => {
+    assert.throws(
+      () =>
+        normalizeTaskState({
+          stepIndex: 1,
+          history: [{ stepIndex: 0, actionType: "click", status: "executed", effect: "unknown_effect" }],
+        }),
+      /Invalid task state\./
+    );
+    assert.throws(
+      () =>
+        normalizeTaskState({
+          stepIndex: 1,
+          history: [{ stepIndex: 0, actionType: "click", status: "executed", effect: 123 }],
+        }),
+      /Invalid task state\./
+    );
+  });
+
   // Rejection tests: generic validation error without leaked data
   it("uses a generic validation error that does not leak submitted data", () => {
     try {

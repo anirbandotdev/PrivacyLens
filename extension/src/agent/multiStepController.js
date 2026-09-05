@@ -85,8 +85,19 @@ export async function runMultiStepTask({
 
     const key = loopKey(action);
 
+    if (action.type === 'type' && recentKeys.length >= 1 && recentKeys[recentKeys.length - 1] === key) {
+      return buildResult('loop_detected', 'Repeated action loop detected', stepsCompleted, history);
+    }
+
     if (recentKeys.length >= 2 && recentKeys[0] === key && recentKeys[1] === key) {
       return buildResult('loop_detected', 'Repeated action loop detected', stepsCompleted, history);
+    }
+
+    if (
+      (action.type === 'search' || action.type === 'submit_search') &&
+      history.some((h) => h.effect === 'search_submitted')
+    ) {
+      return buildResult('stalled', 'Search already submitted; stopping stalled task', stepsCompleted, history);
     }
 
     if (signal?.aborted) {
@@ -120,10 +131,14 @@ export async function runMultiStepTask({
     }
 
     if (execResult.status === 'executed') {
-      history.push(safeEntry(stepIndex, action.type, 'executed'));
+      history.push(safeEntry(stepIndex, action.type, 'executed', execResult.effect));
       stepsCompleted++;
       recentKeys.push(key);
       if (recentKeys.length > 2) recentKeys.shift();
+
+      if (execResult.effect === 'message_sent') {
+        return buildResult('completed', 'Message submitted.', stepsCompleted, history);
+      }
 
       if (waitForReady) {
         await waitForReady({ stepIndex, actionType: action.type, signal });
@@ -155,6 +170,13 @@ const ALLOWED_FAIL_STATUSES = new Set([
   'invalid'
 ]);
 
+const ALLOWED_EFFECTS = new Set([
+  'search_submitted',
+  'message_composed',
+  'media_started',
+  'message_sent'
+]);
+
 function safeExecutionFailureMessage(status) {
   const safeStatus = ALLOWED_FAIL_STATUSES.has(status) ? status : 'failed';
   return `Action execution failed: ${safeStatus}.`;
@@ -168,8 +190,12 @@ function loopKey(action) {
   return `${action.type ?? ''}|${action.targetId ?? ''}|${action.direction ?? ''}`;
 }
 
-function safeEntry(stepIndex, actionType, status) {
-  return { stepIndex, actionType, status };
+function safeEntry(stepIndex, actionType, status, effect) {
+  const entry = { stepIndex, actionType, status };
+  if (effect && ALLOWED_EFFECTS.has(effect)) {
+    entry.effect = effect;
+  }
+  return entry;
 }
 
 function buildResult(status, message, stepsCompleted, history) {

@@ -1,6 +1,7 @@
 const ALLOWED_ACTION_TYPES = new Set(["click", "type", "scroll", "focus", "select", "submit_search", "search"]);
 const ALLOWED_ROOT_KEYS = new Set(["stepIndex", "history"]);
-const ALLOWED_HISTORY_KEYS = new Set(["stepIndex", "actionType", "status"]);
+const ALLOWED_HISTORY_KEYS = new Set(["stepIndex", "actionType", "status", "effect"]);
+const ALLOWED_EFFECTS = new Set(["search_submitted", "message_composed", "media_started", "message_sent"]);
 
 export function normalizeTaskState(taskState) {
   if (taskState === undefined) {
@@ -53,7 +54,7 @@ export function normalizeTaskState(taskState) {
 
     const entryKeys = Object.keys(entry);
     if (
-      entryKeys.length !== 3 ||
+      (entryKeys.length !== 3 && entryKeys.length !== 4) ||
       !entryKeys.every((key) => ALLOWED_HISTORY_KEYS.has(key))
     ) {
       throw new Error("Invalid task state.");
@@ -77,11 +78,23 @@ export function normalizeTaskState(taskState) {
       throw new Error("Invalid task state.");
     }
 
-    normalizedHistory.push({
+    if ("effect" in entry) {
+      if (typeof entry.effect !== "string" || !ALLOWED_EFFECTS.has(entry.effect)) {
+        throw new Error("Invalid task state.");
+      }
+    }
+
+    const normalizedEntry = {
       stepIndex: entryStepIndex,
       actionType,
       status: "executed",
-    });
+    };
+
+    if (entry.effect) {
+      normalizedEntry.effect = entry.effect;
+    }
+
+    normalizedHistory.push(normalizedEntry);
   }
 
   return {

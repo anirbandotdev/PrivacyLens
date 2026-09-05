@@ -1,6 +1,6 @@
 import { PaddleOcrService } from "paddleocr";
 import * as ort from "onnxruntime-web";
-import { base64ToPixels } from "./base64ToPixels";
+import { base64ToPixels } from "./base64ToPixels.js";
 
 const browserAPI = globalThis.browser || globalThis.chrome;
 

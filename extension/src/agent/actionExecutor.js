@@ -1,6 +1,6 @@
 import { validateAgentActions } from "./actionValidator.js";
 
-function runInjectedActions(actions, confirmedActionIndexes = []) {
+async function runInjectedActions(actions, confirmedActionIndexes = []) {
   const confirmedSet = new Set(
     Array.isArray(confirmedActionIndexes) ? confirmedActionIndexes : []
   );
@@ -46,15 +46,16 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
     if (!el) {
       return false;
     }
-    const typeAttr = el.getAttribute("type") || el.type || "";
-    if (typeAttr.toLowerCase() === "password") {
+    const typeAttr = el.getAttribute?.("type") || el.type || "";
+    if (typeof typeAttr === "string" && typeAttr.toLowerCase() === "password") {
       return true;
     }
 
-    const autocompleteAttr = el.getAttribute("autocomplete") || "";
-    const nameAttr = el.getAttribute("name") || "";
-    const idAttr = el.getAttribute("id") || el.id || "";
-    const combined = `${typeAttr} ${autocompleteAttr} ${nameAttr} ${idAttr}`;
+    const autocompleteAttr = el.getAttribute?.("autocomplete") || "";
+    const nameAttr = el.getAttribute?.("name") || "";
+    const idAttr = el.getAttribute?.("id") || el.id || "";
+    const ariaLabel = el.getAttribute?.("aria-label") || "";
+    const combined = `${typeAttr} ${autocompleteAttr} ${nameAttr} ${idAttr} ${ariaLabel}`;
 
     return SENSITIVE_FIELD_REGEX.test(normalizeDescriptor(combined));
   }
@@ -66,12 +67,46 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
       "\\b(?:place(?:\\s+an?)?\\s+order|confirm(?:\\s+an?)?\\s+order|order(?:\\s+now)?)\\b",
       "\\b(?:transfer|withdraw(?:al)?)\\b",
       "\\b(?:send(?:\\s+(?:message|email|mail))?)\\b",
+      "\\b(?:post|publish)\\b",
       "\\bupload\\b",
       "\\b(?:book(?:ing)?|book(?:\\s+now)?)\\b",
       "\\b(?:submit(?:\\s+(?:an?\\s+)?(?:application|form|order|payment|request))?)\\b"
     ].join("|"),
     "i"
   );
+
+  const SEND_CONTROL_REGEX = /\b(?:send(?:\s+(?:message|email|mail))?|post|publish|reply)\b/i;
+  const PLAY_CONTROL_REGEX = /\bplay\b/i;
+
+  function isSendMessageControl(element) {
+    if (!element) {
+      return false;
+    }
+    const idAttr = element.id || element.getAttribute("id") || "";
+    const nameAttr = element.getAttribute("name") || "";
+    const ariaLabel = element.getAttribute("aria-label") || "";
+    const titleAttr = element.getAttribute("title") || "";
+    const val = typeof element.value === "string" ? element.value : "";
+    const text = element.innerText || element.textContent || "";
+
+    const combined = `${idAttr} ${nameAttr} ${ariaLabel} ${titleAttr} ${val} ${text}`;
+    return SEND_CONTROL_REGEX.test(combined);
+  }
+
+  function isPlayMediaClick(element) {
+    if (!element) {
+      return false;
+    }
+    const idAttr = element.id || element.getAttribute("id") || "";
+    const nameAttr = element.getAttribute("name") || "";
+    const ariaLabel = element.getAttribute("aria-label") || "";
+    const titleAttr = element.getAttribute("title") || "";
+    const val = typeof element.value === "string" ? element.value : "";
+    const text = element.innerText || element.textContent || "";
+
+    const combined = `${idAttr} ${nameAttr} ${ariaLabel} ${titleAttr} ${val} ${text}`;
+    return PLAY_CONTROL_REGEX.test(combined);
+  }
 
   function isHighImpactClick(element, action) {
     if (!element) {
@@ -188,11 +223,20 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
       }
 
       targetEl.click();
-      results.push({
+
+      const resultItem = {
         actionIndex: i,
         type: action.type,
         status: "executed"
-      });
+      };
+
+      if (isExplicitlyConfirmed && isSendMessageControl(targetEl)) {
+        resultItem.effect = "message_sent";
+      } else if (isPlayMediaClick(targetEl)) {
+        resultItem.effect = "media_started";
+      }
+
+      results.push(resultItem);
     } else if (action.type === "focus") {
       targetEl.focus();
       results.push({
@@ -240,10 +284,19 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
         status: "executed"
       });
     } else if (action.type === "type") {
-      if (
-        !(targetEl instanceof HTMLInputElement) &&
-        !(targetEl instanceof HTMLTextAreaElement)
-      ) {
+      const isInputOrTextArea =
+        (typeof HTMLInputElement !== "undefined" && targetEl instanceof HTMLInputElement) ||
+        (typeof HTMLTextAreaElement !== "undefined" && targetEl instanceof HTMLTextAreaElement);
+
+      const isContentEditable =
+        (targetEl.getAttribute?.("contenteditable") === "true" ||
+          targetEl.getAttribute?.("contenteditable") === "" ||
+          targetEl.getAttribute?.("contenteditable") === "plaintext-only" ||
+          targetEl.contentEditable === "true" ||
+          targetEl.isContentEditable === true) &&
+        (targetEl.getAttribute?.("role") || "").toLowerCase() === "textbox";
+
+      if (!isInputOrTextArea && !isContentEditable) {
         results.push({
           actionIndex: i,
           type: action.type,
@@ -271,6 +324,82 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
       }
 
       targetEl.focus();
+
+      if (isContentEditable) {
+        let inserted = false;
+        try {
+          const selection = window.getSelection?.();
+          if (selection) {
+            const range = document.createRange?.();
+            if (range) {
+              range.selectNodeContents(targetEl);
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+          }
+
+          if (typeof document.execCommand === "function") {
+            inserted = document.execCommand("insertText", false, action.value);
+          }
+
+          if (!inserted) {
+            if (selection && selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0);
+              range.deleteContents();
+              const textNode = document.createTextNode(action.value);
+              range.insertNode(textNode);
+              range.setStartAfter(textNode);
+              range.setEndAfter(textNode);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              inserted = true;
+            } else {
+              targetEl.textContent = action.value;
+              inserted = true;
+            }
+            const inputEvt = typeof InputEvent === "function"
+              ? new InputEvent("input", { bubbles: true })
+              : new Event("input", { bubbles: true });
+            targetEl.dispatchEvent(inputEvt);
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          const liveEl = document.getElementById(action.targetId) || targetEl;
+          const normalizedLiveText = (liveEl.innerText || liveEl.textContent || "")
+            .replace(/\s+/g, " ")
+            .trim();
+          const normalizedExpected = (action.value || "")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          if (
+            !normalizedLiveText ||
+            (normalizedExpected && !normalizedLiveText.includes(normalizedExpected))
+          ) {
+            inserted = false;
+          }
+        } catch {
+          inserted = false;
+        }
+
+        if (!inserted) {
+          results.push({
+            actionIndex: i,
+            type: action.type,
+            status: "failed"
+          });
+          continue;
+        }
+
+        results.push({
+          actionIndex: i,
+          type: action.type,
+          status: "executed",
+          effect: "message_composed"
+        });
+        continue;
+      }
 
       const previousValue = targetEl.value || "";
       const proto =
@@ -351,7 +480,8 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
       results.push({
         actionIndex: i,
         type: action.type,
-        status: "executed"
+        status: "executed",
+        effect: "search_submitted"
       });
     } else if (action.type === "search") {
       if (!(targetEl instanceof HTMLInputElement)) {
@@ -440,7 +570,8 @@ function runInjectedActions(actions, confirmedActionIndexes = []) {
       results.push({
         actionIndex: i,
         type: action.type,
-        status: "executed"
+        status: "executed",
+        effect: "search_submitted"
       });
     }
   }

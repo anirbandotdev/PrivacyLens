@@ -63,13 +63,25 @@ export function detectDeterministicPII(text) {
 }
 
 export async function detectPII(items) {
-  const model = await getPIIModel();
+  let model = null;
+  try {
+    model = await getPIIModel();
+  } catch (err) {
+    console.warn("PII model loading failed, falling back to deterministic PII detection:", err?.message || err);
+  }
+
   const results = [];
 
   for (const item of items) {
-    const tokens = await model(item.text);
-
-    let piiEntities = aggregatePIIEntities(tokens, NER_THRESHOLD);
+    let piiEntities = [];
+    if (model) {
+      try {
+        const tokens = await model(item.text);
+        piiEntities = aggregatePIIEntities(tokens, NER_THRESHOLD);
+      } catch (err) {
+        piiEntities = [];
+      }
+    }
 
     if (piiEntities.length === 0) {
       const fallbackEntities = detectDeterministicPII(item.text);

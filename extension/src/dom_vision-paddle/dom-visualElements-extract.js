@@ -1,8 +1,8 @@
-import { domToScreenshotBox } from "./coordinates";
-import { getOCR } from "./paddleocr";
-import { getPIIModel } from "./pii-ner";
-import { aggregatePIIEntities } from "./aggregateEntities";
-import { detectDeterministicPII } from "./pii-detector";
+import { domToScreenshotBox } from "./coordinates.js";
+import { getOCR } from "./paddleocr.js";
+import { getPIIModel } from "./pii-ner.js";
+import { aggregatePIIEntities } from "./aggregateEntities.js";
+import { detectDeterministicPII } from "./pii-detector.js";
 
 const MIN_DIMENSION = 20;
 

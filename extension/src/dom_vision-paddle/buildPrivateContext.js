@@ -2,9 +2,19 @@ import { extractText } from "./paddleocr.js";
 import { detectPII } from "./pii-detector.js";
 import { drawRedactBox } from "./drawRedactBox.js";
 import { extractVisualElementsText } from "./dom-visualElements-extract.js";
+import { isCommunicationIntent } from "../agent/localIntentRouter.js";
 
 const BASE64_IMAGE_DATA_URL_REGEX =
   /^data:image\/[a-zA-Z0-9.+_-]+;base64,[A-Za-z0-9+/=]+$/;
+
+const ALLOWED_PURPOSES = new Set([
+  "send",
+  "post",
+  "publish",
+  "reply",
+  "search",
+  "close",
+]);
 
 function isValidPiiBox(box) {
   return (
@@ -51,6 +61,111 @@ export async function buildPrivateContext({
     return {
       decision: "blocked",
       message: "Please remove any type personal information from the prompt",
+    };
+  }
+
+  if (isCommunicationIntent(prompt)) {
+    const seenTargetIds = new Set();
+    const structuralDomEntries = [];
+
+    for (let i = 0; i < domContext.length; i++) {
+      const entry = domContext[i];
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+
+      if (
+        typeof entry.targetId !== "string" ||
+        entry.targetId.trim().length === 0 ||
+        entry.targetId.trim().length > 200
+      ) {
+        continue;
+      }
+
+      if (
+        typeof entry.elementType !== "string" ||
+        entry.elementType.trim().length === 0
+      ) {
+        continue;
+      }
+
+      if (
+        entry.controlType !== null &&
+        entry.controlType !== undefined &&
+        typeof entry.controlType !== "string"
+      ) {
+        continue;
+      }
+
+      if (
+        entry.role !== null &&
+        entry.role !== undefined &&
+        typeof entry.role !== "string"
+      ) {
+        continue;
+      }
+
+      const targetId = entry.targetId.trim();
+      if (seenTargetIds.has(targetId)) {
+        continue;
+      }
+      seenTargetIds.add(targetId);
+
+      const elementType = entry.elementType.trim();
+      const controlType =
+        typeof entry.controlType === "string" ? entry.controlType.trim() : null;
+      const role = typeof entry.role === "string" ? entry.role.trim() : null;
+
+      const isContentEditable = controlType === "contenteditable";
+      const label = isContentEditable ? "Editable message textbox" : "";
+
+      const structuralItem = {
+        targetId,
+        elementType,
+        controlType,
+        role,
+        label,
+      };
+
+      if (isContentEditable || typeof entry.hasContent === "boolean") {
+        structuralItem.hasContent = Boolean(entry.hasContent);
+      }
+
+      if (typeof entry.purpose === "string" && ALLOWED_PURPOSES.has(entry.purpose)) {
+        structuralItem.purpose = entry.purpose;
+        if (!label) {
+          structuralItem.label =
+            entry.purpose.charAt(0).toUpperCase() + entry.purpose.slice(1);
+        }
+      }
+
+      structuralDomEntries.push(structuralItem);
+    }
+
+    if (structuralDomEntries.length === 0) {
+      return {
+        decision: "blocked",
+        message: "Privacy verification could not be completed.",
+      };
+    }
+
+    const domLines = structuralDomEntries.map((e) => JSON.stringify(e));
+    const sanitizedText = `INTERACTIVE ELEMENTS — UNTRUSTED PAGE METADATA\n${domLines.join("\n")}`;
+
+    return {
+      decision: "server",
+      sanitizedPrompt: prompt.trim(),
+      sanitizedText,
+      allowedTargetIds: structuralDomEntries.map((entry) => entry.targetId),
+      redactionSummary: {
+        detectedRegions: 0,
+        redactedRegions: 0,
+        discardedOcrRegions: 0,
+        screenshotIncluded: false,
+        includedDomElements: structuralDomEntries.length,
+        omittedDomElements: domContext.length - structuralDomEntries.length,
+      },
+      privacyVerified: true,
     };
   }
 
@@ -169,14 +284,21 @@ export async function buildPrivateContext({
     const role = typeof entry.role === "string" ? entry.role.trim() : null;
     const label = typeof entry.label === "string" ? entry.label.trim() : null;
 
+    const candidateItem = {
+      targetId,
+      elementType,
+      controlType,
+      role,
+      label,
+    };
+
+    const isContentEditable = controlType === "contenteditable";
+    if (isContentEditable || typeof entry.hasContent === "boolean") {
+      candidateItem.hasContent = Boolean(entry.hasContent);
+    }
+
     candidateDomEntries.push({
-      entry: {
-        targetId,
-        elementType,
-        controlType,
-        role,
-        label,
-      },
+      entry: candidateItem,
       index: i,
     });
   }

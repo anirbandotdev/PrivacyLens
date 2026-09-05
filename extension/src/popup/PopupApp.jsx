@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { executeActionsInActiveTab } from "../agent/actionExecutor.js";
 import { collectSafeDomContextInActiveTab } from "../agent/domContextCollector.js";
+import { isCommunicationIntent } from "../agent/localIntentRouter.js";
 import { runMultiStepTask } from "../agent/multiStepController.js";
 import { runPrivacyAgent } from "../agent/orchestrator.js";
 import { waitForActiveTabReady } from "../agent/pageReadiness.js";
@@ -30,6 +31,7 @@ export default function PopupApp() {
 
   const isTaskRunningRef = useRef(false);
   const confirmationResolverRef = useRef(null);
+  const prevObservationFingerprintRef = useRef(null);
 
   const startAgentFlow = useCallback(async () => {
     setAgentActive(true);
@@ -109,6 +111,10 @@ export default function PopupApp() {
 
   const handlePromptSubmit = useCallback(
     async (cleanedPrompt) => {
+      if (import.meta.env.DEV) {
+        console.log({ event: "submit_attempt", alreadyRunning: isTaskRunningRef.current });
+      }
+
       const targetPrompt =
         typeof cleanedPrompt === "string" ? cleanedPrompt : prompt.trim();
       if (!targetPrompt) {
@@ -121,6 +127,11 @@ export default function PopupApp() {
       }
       isTaskRunningRef.current = true;
 
+      const taskRunId = crypto.randomUUID();
+      if (import.meta.env.DEV) {
+        console.log({ event: "task_start", taskRunId });
+      }
+
       setAgentActive(true);
       setStatus("observing");
       setCaptureError(null);
@@ -132,8 +143,16 @@ export default function PopupApp() {
         const result = await runMultiStepTask({
           prompt: targetPrompt,
           maxSteps: 6,
-          observeAndPlan: ({ stepIndex, history }) =>
-            runPrivacyAgent({
+          observeAndPlan: ({ stepIndex, history }) => {
+            if (import.meta.env.DEV) {
+              console.log({
+                event: "observe",
+                taskRunId,
+                stepIndex,
+                historyLength: history.length,
+              });
+            }
+            return runPrivacyAgent({
               prompt: targetPrompt,
               taskState: { stepIndex, history },
               buildPrivateContext: async ({ prompt: contextPrompt }) => {
@@ -154,7 +173,10 @@ export default function PopupApp() {
 
                   let domContext = [];
                   try {
-                    domContext = await collectSafeDomContextInActiveTab();
+                    const isStructuralOnly = isCommunicationIntent(contextPrompt);
+                    domContext = await collectSafeDomContextInActiveTab({
+                      structuralOnly: isStructuralOnly,
+                    });
                   } catch (error) {
                     console.warn(
                       "DOM context collection failed:",
@@ -177,13 +199,65 @@ export default function PopupApp() {
                     setRedactedImage(contextResult.sanitizedScreenshot);
                   }
 
+                  const isDiagnosticsOptedIn =
+                    (typeof window !== "undefined" &&
+                      (window.__PRIVACYLENS_DIAGNOSTICS__ === true ||
+                        window.localStorage?.getItem("PRIVACYLENS_DIAGNOSTICS") === "true")) ||
+                    Boolean(import.meta.env?.DEV);
+
+                  if (isDiagnosticsOptedIn) {
+                    const currentFingerprint = `${contextResult?.allowedTargetIds?.length || 0}:${contextResult?.sanitizedText?.length || 0}:${(contextResult?.allowedTargetIds || []).join(",")}`;
+                    const observationChanged =
+                      prevObservationFingerprintRef.current !== null
+                        ? prevObservationFingerprintRef.current !== currentFingerprint
+                        : true;
+                    prevObservationFingerprintRef.current = currentFingerprint;
+
+                    const RELEVANT_CONTROL_REGEX =
+                      /\b(?:play|track|result|song|media|video|audio|item)\b/i;
+                    const allowedSet = new Set(contextResult?.allowedTargetIds || []);
+                    const relevantControlRetained = Boolean(
+                      domContext.some(
+                        (el) =>
+                          allowedSet.has(el?.targetId) &&
+                          (RELEVANT_CONTROL_REGEX.test(el?.label || "") ||
+                            RELEVANT_CONTROL_REGEX.test(el?.role || "") ||
+                            RELEVANT_CONTROL_REGEX.test(el?.controlType || ""))
+                      )
+                    );
+
+                    const searchSubmittedPresent = Boolean(
+                      history.some((h) => h.effect === "search_submitted")
+                    );
+
+                    console.log({
+                      event: "observation_diagnostics",
+                      taskRunId,
+                      stepIndex,
+                      observationChanged,
+                      beforeFilterCount: domContext.length,
+                      afterFilterCount:
+                        contextResult?.redactionSummary?.includedDomElements ?? 0,
+                      searchSubmittedPresent,
+                      relevantControlRetained,
+                    });
+                  }
+
                   return contextResult;
                 } finally {
                   setCapturing(false);
                 }
               },
-            }),
+            });
+          },
           executeAction: async (action, { confirmed } = {}) => {
+            if (import.meta.env.DEV) {
+              console.log({
+                event: "execute",
+                taskRunId,
+                actionType: action.type,
+              });
+            }
             const options = confirmed
               ? { confirmedActionIndexes: [0] }
               : undefined;
@@ -230,10 +304,14 @@ export default function PopupApp() {
         setAgentMessage("Failed to process request. Please try again.");
         setStatus("error");
       } finally {
+        if (import.meta.env.DEV) {
+          console.log({ event: "task_finish", taskRunId });
+        }
         setProcessing(false);
         setCapturing(false);
         setAgentActive(false);
         isTaskRunningRef.current = false;
+        prevObservationFingerprintRef.current = null;
         if (confirmationResolverRef.current) {
           confirmationResolverRef.current(false);
           confirmationResolverRef.current = null;

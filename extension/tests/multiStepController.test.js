@@ -533,4 +533,272 @@ describe('runMultiStepTask', () => {
     assert.equal(result.status, 'aborted');
     assert.equal(result.stepsCompleted, 1);
   });
+
+  // === Deterministic full-flow & effect regression tests =====================
+
+  it('Spotify-like flow: search -> search_submitted, result click, Play click -> media_started, completion', async () => {
+    const executedActions = [];
+    let step = 0;
+
+    const observeAndPlan = ({ stepIndex, history }) => {
+      assert.equal(stepIndex, step);
+      if (step === 0) {
+        return makePlan([{ type: 'search', targetId: 'search-input', value: 'Blinding Lights' }]);
+      }
+      if (step === 1) {
+        assert.equal(history.length, 1);
+        assert.equal(history[0].effect, 'search_submitted');
+        return makePlan([{ type: 'click', targetId: 'result-track-1' }]);
+      }
+      if (step === 2) {
+        assert.equal(history.length, 2);
+        assert.equal(history[1].effect, undefined); // Ordinary click has no effect
+        return makePlan([{ type: 'click', targetId: 'play-btn' }]);
+      }
+      if (step === 3) {
+        assert.equal(history.length, 3);
+        assert.equal(history[2].effect, 'media_started');
+        return makePlan([], true, 'Song is playing');
+      }
+      assert.fail('Should not plan beyond completion');
+    };
+
+    const executeAction = async (act) => {
+      executedActions.push(act);
+      step++;
+      if (act.type === 'search') {
+        return { status: 'executed', effect: 'search_submitted' };
+      }
+      if (act.targetId === 'result-track-1') {
+        return { status: 'executed' };
+      }
+      if (act.targetId === 'play-btn') {
+        return { status: 'executed', effect: 'media_started' };
+      }
+      return { status: 'executed' };
+    };
+
+    const result = await runMultiStepTask(baseOpts({ observeAndPlan, executeAction }));
+
+    assert.equal(result.status, 'completed');
+    assert.equal(result.stepsCompleted, 3);
+    assert.equal(result.message, 'Song is playing');
+    assert.equal(executedActions.length, 3);
+
+    // Assert no action executed twice
+    const executedTargetIds = executedActions.map((a) => a.targetId);
+    assert.equal(new Set(executedTargetIds).size, 3);
+
+    // Assert effects recorded properly
+    assert.equal(result.history[0].effect, 'search_submitted');
+    assert.equal(result.history[1].effect, undefined);
+    assert.equal(result.history[2].effect, 'media_started');
+  });
+
+  it('WhatsApp-like flow: type once -> message_composed, re-observe, confirmed Send -> message_sent -> completes immediately', async () => {
+    let typeCount = 0;
+    let confirmationCount = 0;
+    let sendClickCount = 0;
+    let observeCount = 0;
+
+    const observeAndPlan = ({ stepIndex, history }) => {
+      observeCount++;
+      if (stepIndex === 0) {
+        return makePlan([{ type: 'type', targetId: 'msg-composer', value: 'Hello world' }]);
+      }
+      if (stepIndex === 1) {
+        assert.equal(history.length, 1);
+        assert.equal(history[0].effect, 'message_composed');
+        return makePlan([{ type: 'click', targetId: 'send-btn', requiresConfirmation: true }]);
+      }
+      assert.fail('Should not observe again after message_sent');
+    };
+
+    const requestConfirmation = async () => {
+      confirmationCount++;
+      return true;
+    };
+
+    const executeAction = async (act, { confirmed }) => {
+      if (act.type === 'type') {
+        typeCount++;
+        return { status: 'executed', effect: 'message_composed' };
+      }
+      if (act.type === 'click' && act.targetId === 'send-btn') {
+        if (!confirmed) {
+          return { status: 'requires_confirmation' };
+        }
+        sendClickCount++;
+        return { status: 'executed', effect: 'message_sent' };
+      }
+      return { status: 'executed' };
+    };
+
+    const result = await runMultiStepTask(baseOpts({
+      observeAndPlan,
+      executeAction,
+      requestConfirmation
+    }));
+
+    assert.equal(result.status, 'completed');
+    assert.equal(result.message, 'Message submitted.');
+    assert.equal(result.stepsCompleted, 2);
+    assert.equal(typeCount, 1, 'Exactly one insertion');
+    assert.equal(confirmationCount, 1, 'Exactly one confirmation');
+    assert.equal(sendClickCount, 1, 'Exactly one Send click');
+    assert.equal(observeCount, 2, 'Observed exactly twice and terminated immediately');
+  });
+
+  it('does not execute repeated search after search_submitted and stops safely as stalled', async () => {
+    let execCount = 0;
+    const observeAndPlan = ({ stepIndex }) => {
+      if (stepIndex === 0) {
+        return makePlan([{ type: 'search', targetId: 'search-box', value: 'query' }]);
+      }
+      // Planner proposes search again
+      return makePlan([{ type: 'search', targetId: 'search-box', value: 'query' }]);
+    };
+
+    const executeAction = async (act) => {
+      execCount++;
+      return { status: 'executed', effect: 'search_submitted' };
+    };
+
+    const result = await runMultiStepTask(baseOpts({ observeAndPlan, executeAction }));
+
+    assert.equal(result.status, 'stalled');
+    assert.match(result.message, /Search already submitted/i);
+    assert.equal(execCount, 1, 'Did not execute second search');
+    assert.equal(result.stepsCompleted, 1);
+  });
+
+  it('message_sent terminates without another observation', async () => {
+    let observations = 0;
+    const observeAndPlan = () => {
+      observations++;
+      return makePlan([{ type: 'click', targetId: 'send-control', requiresConfirmation: true }]);
+    };
+
+    const executeAction = async (_act, opts) => {
+      if (!opts.confirmed) return { status: 'requires_confirmation' };
+      return { status: 'executed', effect: 'message_sent' };
+    };
+
+    const result = await runMultiStepTask(baseOpts({ observeAndPlan, executeAction }));
+
+    assert.equal(result.status, 'completed');
+    assert.equal(observations, 1);
+  });
+
+  it('history entries and effects contain no private fields', async () => {
+    const observeAndPlan = ({ stepIndex }) => {
+      if (stepIndex === 0) return makePlan([{ type: 'type', targetId: 'composer-1', value: 'Confidential Message' }]);
+      return makePlan([], true);
+    };
+
+    const executeAction = async () => ({ status: 'executed', effect: 'message_composed' });
+
+    const result = await runMultiStepTask(baseOpts({ observeAndPlan, executeAction }));
+
+    assert.equal(result.status, 'completed');
+    for (const entry of result.history) {
+      const allowedKeys = new Set(['stepIndex', 'actionType', 'status', 'effect']);
+      for (const key of Object.keys(entry)) {
+        assert.ok(allowedKeys.has(key), `Forbidden key in history: ${key}`);
+      }
+      assert.equal(entry.targetId, undefined);
+      assert.equal(entry.value, undefined);
+      assert.equal(entry.label, undefined);
+      assert.equal(entry.url, undefined);
+      assert.equal(entry.screenshot, undefined);
+    }
+  });
+
+  it('effect cannot be created solely from action.intent without DOM semantics', async () => {
+    // Ordinary click with intent: "play music" on a cancel button without DOM play semantics
+    const cancelAction = { type: 'click', targetId: 'cancel-btn', intent: 'play music' };
+    let capturedHistory = null;
+
+    const observeAndPlan = ({ history }) => {
+      capturedHistory = history;
+      return makePlan([], true);
+    };
+
+    // Executor simulating DOM check: element is cancel button, not Play button -> status executed without effect
+    const executeAction = async () => ({ status: 'executed' });
+
+    const result = await runMultiStepTask(baseOpts({
+      observeAndPlan: ({ stepIndex }) => stepIndex === 0 ? makePlan([cancelAction]) : makePlan([], true),
+      executeAction
+    }));
+
+    assert.equal(result.status, 'completed');
+    assert.equal(result.history[0].effect, undefined);
+  });
+
+  it('ordinary clicks and ordinary inputs remain unchanged without effects', async () => {
+    const observeAndPlan = ({ stepIndex }) => {
+      if (stepIndex === 0) return makePlan([{ type: 'click', targetId: 'nav-link' }]);
+      if (stepIndex === 1) return makePlan([{ type: 'type', targetId: 'age-input', value: '25' }]);
+      return makePlan([], true);
+    };
+
+    const executeAction = async () => ({ status: 'executed' });
+
+    const result = await runMultiStepTask(baseOpts({
+      observeAndPlan: ({ stepIndex }) => stepIndex === 0 ? makePlan([{ type: 'click', targetId: 'nav-link' }]) : (stepIndex === 1 ? makePlan([{ type: 'type', targetId: 'age-input', value: '25' }]) : makePlan([], true)),
+      executeAction
+    }));
+
+    assert.equal(result.status, 'completed');
+    assert.equal(result.history[0].effect, undefined);
+    assert.equal(result.history[1].effect, undefined);
+  });
+
+  it('handles delayed search results and late-appearing controls without repeating search', async () => {
+    // Step 0: search submitted
+    // Step 1: delayed search results appear in DOM with late Play control
+    // Planner inspects history, sees search_submitted, and clicks the late Play control
+    const plannedActions = [];
+    const observedHistories = [];
+
+    const observeAndPlan = ({ stepIndex, history }) => {
+      observedHistories.push(history);
+      if (stepIndex === 0) {
+        return makePlan([{ type: 'search', targetId: 'privacylens-target-4', value: 'Blinding Lights' }]);
+      }
+      if (stepIndex === 1) {
+        // Assert history contains search_submitted
+        assert.equal(history.length, 1);
+        assert.equal(history[0].effect, 'search_submitted');
+        // Click the newly appeared Play button
+        return makePlan([{ type: 'click', targetId: 'privacylens-target-99' }]);
+      }
+      return makePlan([], true);
+    };
+
+    const executeAction = async (action) => {
+      plannedActions.push(action);
+      if (action.type === 'search') {
+        return { status: 'executed', effect: 'search_submitted' };
+      }
+      if (action.type === 'click') {
+        return { status: 'executed', effect: 'media_started' };
+      }
+      return { status: 'executed' };
+    };
+
+    const result = await runMultiStepTask(baseOpts({
+      observeAndPlan,
+      executeAction,
+      waitForReady: async () => true,
+    }));
+
+    assert.equal(result.status, 'completed');
+    assert.equal(result.stepsCompleted, 2);
+    assert.equal(plannedActions.length, 2);
+    assert.equal(plannedActions[0].type, 'search');
+    assert.equal(plannedActions[1].type, 'click');
+    assert.equal(plannedActions[1].targetId, 'privacylens-target-99');
+  });
 });
