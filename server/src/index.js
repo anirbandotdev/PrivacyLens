@@ -25,4 +25,4 @@ app.use("/api/analyze", analyzeRouter);
 
 app.listen(PORT, () => {
   console.log(`PrivacyLens server running at http://localhost:${PORT}`);
-});
+});

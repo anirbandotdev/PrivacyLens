@@ -1,9 +1,12 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { analyzeWithQwen } from "../services/qwen.js";
+import { analyzeWithGemini } from "../services/gemini.js";
 import { normalizeTaskState } from "../validation/taskState.js";
 
 const router = express.Router();
+const MODEL = process.env.MODEL || "gemini";
+console.log(`Using model: ${MODEL}`);
 
 function classifyError(error) {
   const status = Number(error?.status || error?.statusCode);
@@ -120,12 +123,29 @@ router.post("/", async (request, response) => {
   const requestId = randomUUID();
 
   try {
-    const analysis = await analyzeWithQwen({
-      prompt,
-      sanitizedText,
-      sanitizedScreenshot,
-      taskState: normalizedTaskState,
-    });
+    let analysis = null;
+    if(MODEL === "qwen") {
+      analysis = await analyzeWithQwen({
+        prompt,
+        sanitizedText,
+        sanitizedScreenshot,
+        taskState: normalizedTaskState,
+      });
+    } else if(MODEL === "gemini") {
+      analysis = await analyzeWithGemini({
+        prompt,
+        sanitizedText,
+        sanitizedScreenshot,
+        taskState: normalizedTaskState,
+      });
+    }
+
+    if(!analysis){
+      return response.status(400).json({
+        success: false,
+        error: "Failed to analyze with the selected model.",
+      });
+    }
 
     if (process.env.NODE_ENV !== "production") {
       console.log(
