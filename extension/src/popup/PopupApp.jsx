@@ -4,6 +4,7 @@ import { collectSafeDomContextInActiveTab } from "../agent/domContextCollector.j
 import { isCommunicationIntent } from "../agent/localIntentRouter.js";
 import { runMultiStepTask } from "../agent/multiStepController.js";
 import { runPrivacyAgent } from "../agent/orchestrator.js";
+import { enforceCommunicationContinuation } from "../agent/communicationContinuation.js";
 import { waitForActiveTabReady } from "../agent/pageReadiness.js";
 import ActionConfirmation from "../components/ActionPerm.jsx";
 import ConnectionIndicator from "../components/ConnectionIndicator.jsx";
@@ -144,7 +145,7 @@ export default function PopupApp() {
         const result = await runMultiStepTask({
           prompt: targetPrompt,
           maxSteps: 6,
-          observeAndPlan: ({ stepIndex, history }) => {
+          observeAndPlan: async ({ stepIndex, history }) => {
             if (import.meta.env.DEV) {
               console.log({
                 event: "observe",
@@ -153,7 +154,8 @@ export default function PopupApp() {
                 historyLength: history.length,
               });
             }
-            return runPrivacyAgent({
+            let freshDomContext = [];
+            const plan = await runPrivacyAgent({
               prompt: targetPrompt,
               taskState: { stepIndex, history },
               buildPrivateContext: async ({ prompt: contextPrompt }) => {
@@ -244,11 +246,19 @@ export default function PopupApp() {
                     });
                   }
 
+                  freshDomContext = domContext;
                   return contextResult;
                 } finally {
                   setCapturing(false);
                 }
               },
+            });
+
+            return enforceCommunicationContinuation({
+              prompt: targetPrompt,
+              history,
+              plan,
+              domContext: freshDomContext
             });
           },
           executeAction: async (action, { confirmed } = {}) => {
