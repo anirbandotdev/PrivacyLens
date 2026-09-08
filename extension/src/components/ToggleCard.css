@@ -9,18 +9,22 @@
   transition: all var(--transition-default);
   cursor: default;
 }
+
 .toggle-card:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-default);
 }
+
 .toggle-card--active.toggle-card--teal {
   border-color: var(--teal-glow);
   box-shadow: var(--shadow-glow-teal);
 }
+
 .toggle-card--active.toggle-card--plum {
   border-color: var(--plum-glow);
   box-shadow: var(--shadow-glow-plum);
 }
+
 .toggle-card__icon {
   width: 36px;
   height: 36px;
@@ -33,10 +37,12 @@
   font-size: 1.1rem;
   flex-shrink: 0;
 }
+
 .toggle-card--active .toggle-card__icon {
   color: var(--teal-bright);
   background: var(--teal-glow);
 }
+
 .toggle-card__content {
   flex: 1;
   min-width: 0;
@@ -44,11 +50,13 @@
   flex-direction: column;
   gap: 2px;
 }
+
 .toggle-card__title {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
 }
+
 .toggle-card__desc {
   font-size: 0.72rem;
   color: var(--text-muted);
@@ -68,10 +76,12 @@
   flex-shrink: 0;
   padding: 0;
 }
+
 .toggle-switch--on {
   background: var(--accent-primary);
   border-color: var(--teal-bright);
 }
+
 .toggle-switch__thumb {
   position: absolute;
   top: 2px;
@@ -83,6 +93,7 @@
   transition: transform var(--transition-default);
   box-shadow: var(--shadow-sm);
 }
+
 .toggle-switch--on .toggle-switch__thumb {
   transform: translateX(18px);
 }

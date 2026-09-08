@@ -9,12 +9,12 @@
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 .prompt-box__input {
   width: 100%;
-  min-height: 72px;
+  min-height: 76px;
   padding: 10px 12px;
   resize: none;
 
@@ -29,42 +29,51 @@
   font-size: 0.78rem;
   line-height: 1.5;
 
-  transition: all var(--transition-default);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .prompt-box__input::placeholder {
-  color: var(--text-muted);
+  color: rgba(152, 162, 182, 0.50);
 }
 
 .prompt-box__input:focus {
-  border-color: var(--teal-bright);
-  box-shadow: 0 0 0 3px var(--teal-glow);
+  border-color: var(--slate-400);
+  box-shadow: 0 0 0 3px rgba(132, 143, 165, 0.20);
 }
 
 .prompt-box__submit {
   width: 100%;
   padding: 10px;
 
-  border: 1px solid var(--teal-bright);
+  border: 1px solid var(--slate-400);
   border-radius: var(--radius-sm);
 
-  background: var(--accent-primary);
-  color: var(--text-primary);
+  background: var(--slate-400);
+  color: #ffffff;
 
   font-family: var(--font-sans);
   font-size: 0.78rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
 
   cursor: pointer;
-  transition: all var(--transition-default);
+  transition: all var(--transition-fast);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
 .prompt-box__submit:hover:not(:disabled) {
-  background: var(--accent-primary-bright);
-  box-shadow: var(--shadow-glow-teal);
+  background: var(--slate-300);
+  border-color: var(--slate-300);
+  box-shadow: 0 0 14px rgba(132, 143, 165, 0.35);
+  transform: translateY(-1px);
+}
+
+.prompt-box__submit:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .prompt-box__submit:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+  box-shadow: none;
 }

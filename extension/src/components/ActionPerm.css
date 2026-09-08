@@ -8,7 +8,7 @@
   justify-content: center;
   padding: 20px;
 
-  background: rgba(35, 37, 42, 0.88);
+  background: rgba(45, 45, 42, 0.88);
   backdrop-filter: blur(4px);
 }
 
@@ -34,7 +34,7 @@
 
 .action-confirmation__icon {
   font-size: 1.6rem;
-  color: var(--accent-secondary-bright);
+  color: var(--slate-300);
 }
 
 .action-confirmation__title {
@@ -93,7 +93,7 @@
   font-weight: 600;
 
   cursor: pointer;
-  transition: all var(--transition-default);
+  transition: all var(--transition-fast);
 }
 
 .action-confirmation__reject {
@@ -108,12 +108,13 @@
 }
 
 .action-confirmation__approve {
-  border: 1px solid var(--teal-bright);
-  background: var(--accent-primary);
-  color: var(--text-primary);
+  border: 1px solid var(--slate-400);
+  background: var(--slate-400);
+  color: #ffffff;
 }
 
 .action-confirmation__approve:hover {
-  background: var(--accent-primary-bright);
-  box-shadow: var(--shadow-glow-teal);
+  background: var(--slate-300);
+  border-color: var(--slate-300);
+  box-shadow: 0 0 12px rgba(132, 143, 165, 0.35);
 }

@@ -6,43 +6,53 @@
   border-radius: var(--radius-md);
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
+  transition: border-color var(--transition-fast);
 }
+
 .conn-indicator--connected {
-  border-color: var(--teal-glow);
+  border-color: rgba(132, 143, 165, 0.25);
 }
+
 .conn-indicator__header {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+
 .conn-indicator__dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
+
 .conn-dot--on {
-  background: var(--teal-bright);
-  box-shadow: 0 0 6px var(--teal-glow);
+  background: var(--slate-300);
+  box-shadow: 0 0 8px rgba(152, 162, 182, 0.60);
   animation: pulse 2s ease-in-out infinite;
 }
+
 .conn-dot--off {
   background: #e05252;
+  box-shadow: 0 0 6px rgba(224, 82, 82, 0.40);
 }
+
 .conn-indicator__status {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--text-primary);
 }
+
 .conn-indicator__latency {
   margin-left: auto;
   font-size: 0.7rem;
   font-weight: 500;
-  color: var(--teal-bright);
+  color: var(--slate-300);
   font-family: var(--font-mono);
 }
+
 .conn-indicator__endpoint {
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
   overflow: hidden;

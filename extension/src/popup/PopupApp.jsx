@@ -33,6 +33,8 @@ export default function PopupApp() {
   const confirmationResolverRef = useRef(null);
   const prevObservationFingerprintRef = useRef(null);
 
+  const browserAPI = globalThis.browser || globalThis.chrome;
+
   const startAgentFlow = useCallback(async () => {
     setAgentActive(true);
     setStatus("observing");
@@ -42,7 +44,6 @@ export default function PopupApp() {
     setProcessing(true);
 
     try {
-      const browserAPI = globalThis.browser || globalThis.chrome;
 
       const response = await browserAPI.runtime.sendMessage({
         type: "PROCESS_CURRENT_PAGE",
@@ -344,7 +345,13 @@ export default function PopupApp() {
       {/* Header */}
       <header className="popup__header">
         <div className="popup__brand">
-          <span className="popup__logo">🔒</span>
+          <span className="popup__logo">
+            <img
+              src="/logo.png"
+              alt="PrivacyLens Logo"
+              className="popup__logo-img"
+            />
+          </span>
           <div className="popup__brand-text">
             <h1 className="popup__title">PrivacyLens</h1>
             <span className="popup__subtitle">Vision Agent</span>
@@ -355,7 +362,7 @@ export default function PopupApp() {
 
       <div>
         {screenshot && (
-          <div className="popup__section">
+          <div className="popup__section popup__section--preview">
             <div className="popup__screen-header">
               <h2 className="popup__section-title">
                 {redactedImage ? "Redacted Screen" : "Current Screen"}
@@ -390,8 +397,22 @@ export default function PopupApp() {
 
             {redactedImage && (
               <button className="popup__download-btn" onClick={handleDownload}>
-                <span className="popup__download-icon">📥</span>
-                Download Redacted Image
+                <svg
+                  className="popup__download-icon"
+                  viewBox="0 0 24 24"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Download Redacted Image</span>
               </button>
             )}
           </div>
@@ -399,7 +420,7 @@ export default function PopupApp() {
       </div>
 
       {/* User Prompt */}
-      <div className="popup__section">
+      <div className="popup__section popup__section--prompt">
         <PromptBox
           prompt={prompt}
           onPromptChange={setPrompt}
@@ -411,43 +432,15 @@ export default function PopupApp() {
             {agentMessage}
           </div>
         )}
+        {captureError && (
+          <div className="popup__error-message" role="alert">
+            {captureError}
+          </div>
+        )}
       </div>
 
-      {/* Main Toggle */}
-      {/* <div className="popup__section">
-        <button
-          className={`popup__agent-btn ${agentActive ? "popup__agent-btn--active" : ""}`}
-          onClick={handleToggleAgent}
-        >
-          <span className="popup__agent-btn-icon">
-            {agentActive ? "⏸" : "▶"}
-          </span>
-          <span className="popup__agent-btn-label">
-            {agentActive ? "Stop Agent" : "Start Agent"}
-          </span>
-        </button>
-      </div> */}
-
-      {/* Privacy Level */}
-      {/* <div className="popup__section">
-        <span className="popup__section-title">Privacy Level</span>
-        <div className="popup__privacy-levels">
-          {PRIVACY_LEVELS.map((level) => (
-            <button
-              key={level.key}
-              className={`popup__privacy-btn ${privacyLevel === level.key ? "popup__privacy-btn--active" : ""}`}
-              onClick={() => setPrivacyLevel(level.key)}
-              title={level.desc}
-            >
-              <span className="popup__privacy-label">{level.label}</span>
-              <span className="popup__privacy-desc">{level.desc}</span>
-            </button>
-          ))}
-        </div>
-      </div> */}
-
       {/* Connection */}
-      <div className="popup__section">
+      <div className="popup__section popup__section--connection">
         <span className="popup__section-title">Server</span>
         <ConnectionIndicator
           status={serverStatus}
@@ -459,7 +452,7 @@ export default function PopupApp() {
       {/* Dashboard Link */}
       <div className="popup__footer">
         <button className="popup__dashboard-btn" onClick={openDashboard}>
-          Open Dashboard
+          <span>Open Dashboard</span>
           <span className="popup__dashboard-arrow">→</span>
         </button>
       </div>

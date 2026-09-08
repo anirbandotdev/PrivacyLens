@@ -8,10 +8,12 @@
   border: 1px solid var(--border-subtle);
   overflow: hidden;
 }
+
 .pipeline-flow--active {
-  border-color: var(--teal-glow);
-  box-shadow: var(--shadow-glow-teal);
+  border-color: var(--slate-400);
+  box-shadow: var(--shadow-glow-accent);
 }
+
 .pipeline-flow__svg {
   position: absolute;
   inset: 0;
@@ -19,9 +21,11 @@
   height: 100%;
   z-index: 0;
 }
+
 .flow-path--animated {
   animation: flowDash 1s linear infinite;
 }
+
 .pipeline-flow__nodes {
   position: absolute;
   inset: 0;
@@ -43,28 +47,34 @@
   pointer-events: auto;
   transition: all var(--transition-default);
 }
+
 .pipeline-node:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
+
 .pipeline-node--client {
-  background: rgba(31, 95, 97, 0.15);
-  border-color: var(--teal-glow);
+  background: rgba(132, 143, 165, 0.14);
+  border-color: rgba(132, 143, 165, 0.28);
 }
+
 .pipeline-node--server {
-  background: rgba(69, 38, 50, 0.15);
-  border-color: var(--plum-glow);
+  background: rgba(76, 76, 71, 0.30);
+  border-color: rgba(76, 76, 71, 0.50);
 }
+
 .pipeline-node__icon {
   font-size: 1rem;
   flex-shrink: 0;
 }
+
 .pipeline-node__text {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
 }
+
 .pipeline-node__label {
   font-size: 0.68rem;
   font-weight: 600;
@@ -73,6 +83,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .pipeline-node__sub {
   font-size: 0.58rem;
   color: var(--text-muted);
