@@ -439,16 +439,6 @@ export default function PopupApp() {
         )}
       </div>
 
-      {/* Connection */}
-      <div className="popup__section popup__section--connection">
-        <span className="popup__section-title">Server</span>
-        <ConnectionIndicator
-          status={serverStatus}
-          endpoint="wss://api.privacylens.local"
-          latency={latency}
-        />
-      </div>
-
       {/* Dashboard Link */}
       <div className="popup__footer">
         <button className="popup__dashboard-btn" onClick={openDashboard}>
